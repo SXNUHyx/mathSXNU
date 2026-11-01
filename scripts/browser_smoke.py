@@ -61,6 +61,8 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium"), args=browser_args, **browser_options)
             errors = []
             teacher_context = browser.new_context(viewport={"width": 1440, "height": 1000})
+            external_requests = []
+            teacher_context.on('request', lambda req: external_requests.append(req.url) if req.url.startswith(('http:', 'https:')) and not req.url.startswith(base + '/') else None)
             teacher = teacher_context.new_page()
             teacher.on("pageerror", lambda e: errors.append(str(e)))
             teacher.goto(base)
@@ -92,24 +94,67 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student_url = teacher.locator("#student-link").input_value()
             dashboard_url = teacher.url
             for kind, title in [("knowledge", "总体均值"), ("key", "重点公式"), ("difficult", "方差的含义")]:
-                teacher.get_by_role("link", name="＋ 添加模块", exact=True).click()
-                teacher.get_by_label("模块类型").select_option(kind)
+                label = {'knowledge':'知识点', 'key':'重点', 'difficult':'难点'}[kind]
+                teacher.get_by_role("link", name="＋ 添加"+label+"模块", exact=True).click()
+                assert teacher.get_by_label('模块类型').input_value() == kind
                 teacher.get_by_label("模块标题").fill(title)
-                teacher.get_by_label("内容（支持LaTeX）", exact=True).fill(r"期望定义：\[E(X)=\sum_i x_i p_i\]")
+                body = teacher.get_by_label("内容（支持LaTeX）", exact=True)
+                body.fill('公式示例：')
+                teacher.get_by_text('打开可视化公式编辑器', exact=True).click()
+                if kind == 'knowledge':
+                    # Every template must round-trip to supported student-side LaTeX.
+                    for category in ['常用','微积分','矩阵与方程','概率统计']:
+                        teacher.get_by_label('公式模板分类',exact=True).select_option(label=category)
+                        for item in teacher.locator('.formula-palette button').all():
+                            teacher.locator('math-field').evaluate('(mf) => { mf.value=""; }')
+                            item.click()
+                            teacher.locator('math-field').evaluate('(mf) => katex.renderToString(mf.value, {throwOnError:true,trust:false})')
+                    teacher.locator('math-field').evaluate('(mf) => { mf.value=""; }')
+                teacher.get_by_label('公式模板分类', exact=True).select_option(label='概率统计')
+                teacher.get_by_role('button', name='期望', exact=True).click()
+                assert 'E(X)' in teacher.locator('math-field').evaluate('(mf) => mf.value')
+                if kind == 'knowledge':
+                    teacher.screenshot(path=str(ARTIFACTS / 'formula-editor-desktop.png'), full_page=True)
+                teacher.get_by_role('button', name='插入到正文', exact=True).click()
+                if kind == 'knowledge':
+                    # Reopen from inside a formula; replace it rather than adding a duplicate.
+                    body.evaluate('(el) => { const p=el.value.indexOf("E(X)")+2; el.setSelectionRange(p,p); }')
+                    teacher.get_by_text('打开可视化公式编辑器', exact=True).click()
+                    teacher.get_by_text('查看或粘贴 LaTeX', exact=True).click()
+                    teacher.get_by_label('公式LaTeX（可选）', exact=True).fill(r'E(X)=\sum_{i=1}^{n} x_i p_i')
+                    teacher.get_by_role('button', name='替换选中的公式 / 文字', exact=True).click()
+                    assert body.input_value().count(r'\(') == 1
+                    # Open the local formula keyboard in a touch-sized viewport.
+                    teacher.set_viewport_size({'width':390,'height':844})
+                    teacher.get_by_text('打开可视化公式编辑器', exact=True).click()
+                    teacher.get_by_role('button', name='打开 / 收起公式键盘', exact=True).click()
+                    assert teacher.evaluate('mathVirtualKeyboard.visible')
+                    assert teacher.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+                    teacher.screenshot(path=str(ARTIFACTS / 'formula-editor-mobile.png'), full_page=True)
+                    teacher.get_by_text('打开可视化公式编辑器', exact=True).click()
+                    teacher.set_viewport_size({'width':1440,'height':1000})
                 teacher.locator('.math-preview .katex').first.wait_for()
+                assert teacher.locator('.math-preview .katex-error').count() == 0
                 teacher.get_by_role("button", name="保存模块", exact=True).click()
             from PIL import Image
             image_path = Path(tmp) / "知识点图片.png"
             Image.new("RGB", (160, 100), "#dbeede").save(image_path)
             pdf_path = Path(tmp) / "课程资料.pdf"
             teacher.pdf(path=str(pdf_path))
-            for title, path in [("均值示意图", image_path), ("课程讲义PDF", pdf_path)]:
-                teacher.get_by_role("link", name="上传图片 / 资料", exact=True).click()
+            for kind, title, path in [("knowledge", "均值示意图", image_path), ("key", "课程讲义PDF", pdf_path), ("difficult", "难点补充PDF", pdf_path)]:
+                section = teacher.locator('#section-'+kind)
+                if path.suffix == '.png':
+                    section.get_by_role('link', name='上传到此模块', exact=True).click()
+                    assert teacher.get_by_label('板块内的模块（选填）', exact=True).input_value()
+                else:
+                    section.get_by_role('link', name='上传'+{'key':'重点','difficult':'难点'}[kind]+'资料', exact=True).click()
                 teacher.get_by_label("资料或图片名称").fill(title)
-                if path.suffix == ".png":
-                    teacher.get_by_label("关联模块（选填）", exact=True).select_option(label="知识点 · 总体均值")
+                assert teacher.get_by_label('所属板块', exact=True).input_value() == kind
                 teacher.get_by_label("选择文件", exact=True).set_input_files(str(path))
                 teacher.get_by_role("button", name="上传并发布", exact=True).click()
+            assert teacher.locator('#section-key').get_by_role('link', name='课程讲义PDF', exact=False).count() == 1
+            assert teacher.locator('#section-difficult').get_by_role('link', name='课程讲义PDF', exact=False).count() == 0
+            teacher.locator('#course-content').screenshot(path=str(ARTIFACTS / 'learning-sections.png'))
             mobile_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
             student = mobile_context.new_page()
             student.on("pageerror", lambda e: errors.append(str(e)))
@@ -129,6 +174,9 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.get_by_label("想让老师多讲一点什么").fill("方差为什么不能直接用均值代替？")
             student.get_by_role("button", name="把信号送给老师").click()
             student.get_by_role("status").filter(has_text="反馈已送达老师").wait_for()
+            assert student.locator('#course-content > section').count() == 3
+            assert student.locator('#section-key').get_by_role('link', name='课程讲义PDF', exact=False).count() == 1
+            student.locator('#section-difficult .math-content .katex').first.wait_for()
             student.screenshot(path=str(ARTIFACTS / "student-mobile.png"), full_page=True)
             teacher.wait_for_function("document.querySelector('#count-red').textContent === '1'", timeout=10000)
             teacher.wait_for_timeout(500)  # Let the chart's short CSS transition settle for the screenshot.
@@ -197,8 +245,9 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.screenshot(path=str(ARTIFACTS / "home-mobile.png"), full_page=True)
             assert student.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
+            assert not external_requests, external_requests
             browser.close()
-        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "知识点重点难点模块", "LaTeX编辑预览及学生渲染", "图片上传与受保护读取", "PDF上传下载", "姓名学号反馈", "教师回复自动到达学生端", "回复已读", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "CSV下载", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "三个独立学习板块", "分板块和模块上传资料", "本地可视化公式插入与再次编辑", "手机公式键盘", "公式编辑无第三方请求", "LaTeX编辑预览及学生渲染", "图片上传与受保护读取", "PDF上传下载", "姓名学号反馈", "教师回复自动到达学生端", "回复已读", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "CSV下载", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)

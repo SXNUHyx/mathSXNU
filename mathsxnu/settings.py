@@ -1,9 +1,23 @@
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import urlsplit
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ASSET_VERSION = "20261101-learning"
+ASSET_VERSION = "20261101-sections-formulas"
+# Optional licensed MathType service base URI; no demo service is enabled.
+MATHTYPE_SERVICE_URI = os.environ.get("MATHTYPE_SERVICE_URI", "").strip()
+MATHTYPE_SERVICE_SERVER = os.environ.get("MATHTYPE_SERVICE_SERVER", "java").strip()
+if MATHTYPE_SERVICE_URI:
+    service_url = urlsplit(MATHTYPE_SERVICE_URI)
+    relative = MATHTYPE_SERVICE_URI.startswith("/") and not MATHTYPE_SERVICE_URI.startswith("//")
+    if (not (relative or (service_url.scheme == "https" and service_url.hostname))
+            or service_url.username or service_url.password or service_url.query or service_url.fragment
+            or "\\" in MATHTYPE_SERVICE_URI or any(c.isspace() for c in MATHTYPE_SERVICE_URI)
+            or not MATHTYPE_SERVICE_URI.endswith("/")
+            or MATHTYPE_SERVICE_SERVER not in {"java", "php"}):
+        raise ImproperlyConfigured("MathType需要不含密钥的HTTPS或同源服务根路径（以/结尾），服务类型为java或php。")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOW_INSECURE_HTTP = os.environ.get("DJANGO_ALLOW_INSECURE_HTTP", "0") == "1"
 PUBLIC_ORIGIN = os.environ.get("DJANGO_PUBLIC_ORIGIN", "")

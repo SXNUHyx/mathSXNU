@@ -17,13 +17,10 @@
   math();
   document.querySelectorAll('form[data-confirm]').forEach(form => form.addEventListener('submit', e => { if (!window.confirm(form.dataset.confirm)) e.preventDefault(); }));
   document.querySelectorAll('textarea.latex-editor').forEach(editor => {
-    const tools = el('div', 'latex-tools');
-    const examples = [ ['行内公式', String.raw`\(x^2\)`], ['分式', String.raw`\(\frac{a}{b}\)`], ['积分', String.raw`\[\int_a^b f(x)\,dx\]`], ['极限', String.raw`\(\lim_{x\to 0} f(x)\)`] ];
     const preview = el('div', 'math-content math-preview');
     preview.setAttribute('aria-label', '公式预览');
     const update = () => { preview.textContent = editor.value || '公式和文字预览将显示在这里'; delete preview.dataset.mathRendered; math(preview); };
-    examples.forEach(([label, value]) => { const button = el('button', 'button secondary', label); button.type = 'button'; button.addEventListener('click', () => { editor.setRangeText(value, editor.selectionStart, editor.selectionEnd, 'end'); editor.focus(); update(); }); tools.append(button); });
-    editor.before(tools); editor.after(preview); editor.addEventListener('input', update); update();
+    editor.after(preview); editor.addEventListener('input', update); update();
   });
   const note = q('#note');
   if (note) { const update = () => { q('#char-count').textContent = `${note.value.length} / 300`; }; note.addEventListener('input', update); update(); }

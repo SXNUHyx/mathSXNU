@@ -1,3 +1,4 @@
 {% extends 'base.html' %}
+{% block extra_head %}{% include 'includes/formula_assets.html' %}{% endblock %}
 {% block title %}回复学生 · 课堂信号{% endblock %}
 {% block content %}<section class="panel editor-panel"><a class="back-link" href="{% url 'dashboard' lesson.code %}#feedback">← 返回学生反馈</a><p class="eyebrow">{{ lesson.course }} / {{ lesson.title }}</p><h1 class="page-title">回复学生的问题</h1><p><b>{{ response.real_name|default:response.user.username }}</b> · 学号 {{ response.student_number|default:'历史反馈未填写' }} · {{ response.get_status_display }}</p><blockquote class="math-content">{{ response.note|default:'学生未填写补充说明' }}</blockquote><p class="muted small">解释会只发送给该学生；学生在线时约3秒自动接收。内容支持LaTeX公式。</p><form method="post">{% csrf_token %}{{ form.event_id }}<label for="id_message">{{ form.message.label }}</label>{{ form.message }}{{ form.errors }}<button type="submit" class="button primary">发送解释 →</button></form></section>{% endblock %}

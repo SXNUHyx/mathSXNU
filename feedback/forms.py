@@ -84,13 +84,20 @@ class KnowledgeBlockForm(forms.ModelForm):
 class CourseMaterialForm(forms.ModelForm):
     class Meta:
         model = CourseMaterial
-        fields = ["title", "block", "file"]
-        labels = {"title": "资料或图片名称", "block": "关联模块（选填）", "file": "选择文件"}
+        fields = ["section", "title", "block", "file"]
+        labels = {"section": "所属板块", "title": "资料或图片名称", "block": "板块内的模块（选填）", "file": "选择文件"}
         widgets = {"file": forms.FileInput(attrs={"accept": ".jpg,.jpeg,.png,.webp,.pdf,.ppt,.pptx"})}
 
-    def __init__(self, *args, lesson, **kwargs):
+    def __init__(self, *args, lesson, section=KnowledgeBlock.Kind.KNOWLEDGE, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["block"].queryset = lesson.blocks.all()
+        self.fields["section"].choices = [(section, KnowledgeBlock.Kind(section).label)]
+        self.fields["section"].initial = section
+        # Also support old clients that did not submit a section field.
+        if self.is_bound and not self.data.get("section"):
+            self.data = self.data.copy()
+            self.data["section"] = section
+        self.fields["block"].queryset = lesson.blocks.filter(kind=section)
+        self.fields["block"].empty_label = "放在本板块资料区（不关联具体模块）"
 
     def clean_file(self):
         uploaded = self.cleaned_data["file"]

@@ -18,7 +18,9 @@ def account_role(user):
 
 def account_context(request):
     return {"account_role": account_role(request.user), "http_trial": settings.ALLOW_INSECURE_HTTP,
-            "asset_version": settings.ASSET_VERSION}
+            "asset_version": settings.ASSET_VERSION,
+            "mathtype_service_uri": settings.MATHTYPE_SERVICE_URI,
+            "mathtype_service_server": settings.MATHTYPE_SERVICE_SERVER}
 
 
 def teacher_required(view):

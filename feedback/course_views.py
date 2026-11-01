@@ -49,13 +49,16 @@ def lesson_restore(request, code):
 def block_edit(request, code, pk=None):
     lesson = owned(request, code)
     block = get_object_or_404(KnowledgeBlock, pk=pk, lesson=lesson) if pk else None
-    form = KnowledgeBlockForm(request.POST if request.method == "POST" else None, instance=block)
+    initial = {"kind": request.GET.get("kind", KnowledgeBlock.Kind.KNOWLEDGE)} if not block else {}
+    form = KnowledgeBlockForm(request.POST if request.method == "POST" else None, instance=block, initial=initial)
     if request.method == "POST" and form.is_valid():
         block = form.save(commit=False)
         block.lesson = lesson
-        block.save()
+        with transaction.atomic():
+            block.save()
+            block.materials.update(section=block.kind)
         messages.success(request, "课程模块已保存。")
-        return redirect(reverse("dashboard", args=[code]) + "#course-content")
+        return redirect(reverse("dashboard", args=[code]) + "#section-" + block.kind)
     return render(request, "content_form.html", {"lesson": lesson, "form": form, "kind": "block", "editing": bool(pk)})
 
 
@@ -63,15 +66,29 @@ def block_edit(request, code, pk=None):
 @require_POST
 def block_delete(request, code, pk):
     block = get_object_or_404(KnowledgeBlock, pk=pk, lesson=owned(request, code))
-    block.delete()
-    messages.success(request, "模块已删除，原模块中的文件仍保留在课程资料库。")
-    return redirect(reverse("dashboard", args=[code]) + "#course-content")
+    section = block.kind
+    with transaction.atomic():
+        block.materials.update(section=section)
+        block.delete()
+    messages.success(request, "模块已删除，原文件仍保留在对应板块的资料区。")
+    return redirect(reverse("dashboard", args=[code]) + "#section-" + section)
 
 
 @teacher_required
 def material_upload(request, code):
     lesson = owned(request, code)
-    form = CourseMaterialForm(request.POST if request.method == "POST" else None, request.FILES or None, lesson=lesson)
+    section = request.GET.get("section") or request.POST.get("section") or KnowledgeBlock.Kind.KNOWLEDGE
+    if section not in KnowledgeBlock.Kind.values:
+        return HttpResponseBadRequest("请选择知识点、重点或难点板块。")
+    initial = {}
+    if request.GET.get("block"):
+        try:
+            block_pk = int(request.GET["block"])
+        except ValueError:
+            return HttpResponseBadRequest("请选择有效的模块。")
+        initial["block"] = get_object_or_404(lesson.blocks, pk=block_pk, kind=section).pk
+    form = CourseMaterialForm(request.POST if request.method == "POST" else None, request.FILES or None,
+                              lesson=lesson, section=section, initial=initial)
     if request.method == "POST" and form.is_valid():
         material = form.save(commit=False)
         material.lesson = lesson
@@ -81,7 +98,7 @@ def material_upload(request, code):
         material.is_image = form.inspected_image
         material.save()
         messages.success(request, "图片或课程资料已上传，课堂成员现在可以查看。")
-        return redirect(reverse("dashboard", args=[code]) + "#course-content")
+        return redirect(reverse("dashboard", args=[code]) + "#section-" + material.section)
     return render(request, "content_form.html", {"lesson": lesson, "form": form, "kind": "upload"})
 
 

@@ -1,12 +1,18 @@
 from django.urls import reverse
 from django.utils import timezone
+from .models import KnowledgeBlock
 
 
 def content_context(lesson):
     materials = list(lesson.materials.filter(deleted_at__isnull=True))
     blocks = list(lesson.blocks.all())
-    return {"blocks": [{"item": block, "materials": [m for m in materials if m.block_id == block.pk]} for block in blocks],
-            "materials": materials, "general_materials": [m for m in materials if m.block_id is None]}
+    sections = []
+    for kind, label in KnowledgeBlock.Kind.choices:
+        sections.append({"kind": kind, "label": label,
+                         "blocks": [{"item": block, "materials": [m for m in materials if m.block_id == block.pk]}
+                                    for block in blocks if block.kind == kind],
+                         "materials": [m for m in materials if m.block_id is None and m.section == kind]})
+    return {"content_sections": sections}
 
 
 def reply_payload(reply):

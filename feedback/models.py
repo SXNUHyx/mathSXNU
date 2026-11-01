@@ -112,6 +112,7 @@ def material_path(instance, filename):
 
 class CourseMaterial(models.Model):
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name="materials")
+    section = models.CharField(max_length=10, choices=KnowledgeBlock.Kind.choices, default=KnowledgeBlock.Kind.KNOWLEDGE)
     block = models.ForeignKey(KnowledgeBlock, on_delete=models.SET_NULL, null=True, blank=True, related_name="materials")
     title = models.CharField(max_length=100)
     file = models.FileField(upload_to=material_path)

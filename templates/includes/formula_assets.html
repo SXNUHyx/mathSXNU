@@ -1,0 +1,6 @@
+{% load static %}
+<script src="{% static 'vendor/mathlive/mathlive.min.js' %}" defer></script>
+<script id="formula-editor-assets" src="{% static 'formula-editor.js' %}?v={{ asset_version }}" defer
+        data-fonts="{% static 'vendor/mathlive/fonts' %}"
+        data-mathtype-script="{% static 'vendor/mathtype/wirisplugin-generic.js' %}"
+        data-mathtype-uri="{{ mathtype_service_uri }}" data-mathtype-server="{{ mathtype_service_server }}"></script>

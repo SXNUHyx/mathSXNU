@@ -73,26 +73,41 @@ def main():
                 "from feedback.models import Lesson,Response\n"
                 "import uuid\n"
                 "u=get_user_model().objects.create_user('container_test')\n"
+                "from django.apps import apps\n"
+                "try:\n"
+                "    Profile=apps.get_model('feedback','AccountProfile')\n"
+                "except LookupError:\n"
+                "    Profile=None\n"
+                "if Profile:\n"
+                "    Profile.objects.create(user=u,role='teacher')\n"
                 "l=Lesson.objects.create(teacher=u,title='容器持久化演示')\n"
                 "Response.objects.create(lesson=l,participant=uuid.uuid4(),status='red')\n"
             )
             run("exec", "-T", "web", "python", "manage.py", "shell", input=seed, text=True, stdout=subprocess.DEVNULL)
-            if args.upgrade_from:
-                run("stop", "gateway")
-                run("exec", "-T", "web", "python", "manage.py", "backup_classroom", "--output", "/data/pre-upgrade.sqlite3")
-                overrides["services"]["web"]["image"] = "mathsxnu-classroom:local"
-                override.write_text(json.dumps(overrides))
-                run("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
-                run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import AccountProfile,Response\nassert AccountProfile.objects.get(user__username='container_test').role=='teacher'\nassert Response.objects.get().user_id is None\n", text=True, stdout=subprocess.DEVNULL)
-                print("旧版到注册版升级通过：原普通教师自动保留教师身份，历史反馈保留且不误绑账号。")
             course_file_seed = (
                 "from feedback.models import Lesson,KnowledgeBlock,CourseMaterial\n"
                 "from django.core.files.base import ContentFile\n"
                 "lesson=Lesson.objects.get()\n"
-                "block=KnowledgeBlock.objects.create(lesson=lesson,title='持久知识点',body=r'\\(x^2\\)')\n"
+                "block=KnowledgeBlock.objects.create(lesson=lesson,kind='difficult',title='持久知识点',body=r'\\(x^2\\)')\n"
                 "CourseMaterial.objects.create(lesson=lesson,block=block,title='持久课程文件',file=ContentFile(b'%PDF-1.7\\nfixture',name='fixture.pdf'),original_name='fixture.pdf',content_type='application/pdf',size=16,is_image=False)\n"
             )
-            run("exec", "-T", "web", "python", "manage.py", "shell", input=course_file_seed, text=True, stdout=subprocess.DEVNULL)
+            has_old_materials = False
+            if args.upgrade_from:
+                probe = run("exec", "-T", "web", "python", "manage.py", "shell", input="from django.apps import apps\nprint('HAS_MATERIALS' if apps.get_model('feedback','Lesson')._meta.apps.all_models['feedback'].get('coursematerial') else 'NO_MATERIALS')\n",text=True,capture_output=True)
+                has_old_materials = 'HAS_MATERIALS' in probe.stdout
+                if has_old_materials:
+                    run("exec", "-T", "web", "python", "manage.py", "shell", input=course_file_seed,text=True,stdout=subprocess.DEVNULL)
+                run("stop", "gateway")
+                run("exec", "-T", "web", "python", "manage.py", "backup_classroom", "--output", "/data/pre-upgrade.sqlite3")
+                if has_old_materials:
+                    run("exec", "-T", "web", "python", "manage.py", "backup_course_files", "--output", "/data/pre-upgrade-materials.tar.gz")
+                overrides["services"]["web"]["image"] = "mathsxnu-classroom:local"
+                override.write_text(json.dumps(overrides))
+                run("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
+                run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import AccountProfile,Response\nassert AccountProfile.objects.get(user__username='container_test').role=='teacher'\nassert Response.objects.get().user_id is None\n", text=True, stdout=subprocess.DEVNULL)
+                print("旧版升级通过：教师身份与历史反馈保留；既有资料（如有）保留。")
+            if not has_old_materials:
+                run("exec", "-T", "web", "python", "manage.py", "shell", input=course_file_seed, text=True, stdout=subprocess.DEVNULL)
             run("restart", "web")
             for _ in range(50):
                 try:
@@ -104,7 +119,7 @@ def main():
             else:
                 raise RuntimeError("容器重启后未恢复健康状态")
             run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import Lesson,Response\nassert Lesson.objects.get().title=='容器持久化演示'\nassert Response.objects.get().status=='red'\n", text=True, stdout=subprocess.DEVNULL)
-            run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import CourseMaterial,KnowledgeBlock\nfrom django.conf import settings\nfrom pathlib import Path\nm=CourseMaterial.objects.get()\nassert str(settings.MEDIA_ROOT)=='/data/media'\nassert Path(m.file.path).read_bytes()==b'%PDF-1.7\\nfixture'\nassert KnowledgeBlock.objects.get().title=='持久知识点'\n",text=True,stdout=subprocess.DEVNULL)
+            run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import CourseMaterial,KnowledgeBlock\nfrom django.conf import settings\nfrom pathlib import Path\nm=CourseMaterial.objects.get()\nassert str(settings.MEDIA_ROOT)=='/data/media'\nassert Path(m.file.path).read_bytes()==b'%PDF-1.7\\nfixture'\nassert m.block.kind=='difficult'\nfrom feedback.learning import content_context\nassert content_context(m.lesson)['content_sections'][2]['blocks'][0]['materials'][0].pk==m.pk\nassert KnowledgeBlock.objects.get().title=='持久知识点'\n",text=True,stdout=subprocess.DEVNULL)
             if args.http_trial:
                 for role in ["teacher", "student"]:
                     jar = CookieJar()
