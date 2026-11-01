@@ -4,6 +4,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
+ALLOW_INSECURE_HTTP = os.environ.get("DJANGO_ALLOW_INSECURE_HTTP", "0") == "1"
+PUBLIC_ORIGIN = os.environ.get("DJANGO_PUBLIC_ORIGIN", "")
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if not DEBUG:
@@ -31,6 +33,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "feedback.middleware.AuthenticationTransportMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -73,12 +76,12 @@ LOGIN_REDIRECT_URL = "teacher_home"
 LOGOUT_REDIRECT_URL = "home"
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_SECURE = not (DEBUG or ALLOW_INSECURE_HTTP)
+CSRF_COOKIE_SECURE = not (DEBUG or ALLOW_INSECURE_HTTP)
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 if os.environ.get("DJANGO_TRUST_PROXY") == "1":
     # Enable only behind a trusted proxy that overwrites this header.
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT", "0" if DEBUG else "1") == "1"
+SECURE_SSL_REDIRECT = os.environ.get("DJANGO_SSL_REDIRECT", "0" if DEBUG or ALLOW_INSECURE_HTTP else "1") == "1"
 SECURE_REDIRECT_EXEMPT = [r"^health/$"]

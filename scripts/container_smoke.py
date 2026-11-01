@@ -12,7 +12,10 @@ import socket
 import subprocess
 import tempfile
 import time
-from urllib.request import Request, ProxyHandler, build_opener
+from urllib.request import Request, ProxyHandler, HTTPCookieProcessor, build_opener
+from urllib.parse import urlencode
+from http.cookiejar import CookieJar
+import re
 from urllib.error import HTTPError
 import uuid
 
@@ -28,6 +31,7 @@ def free_port():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--upgrade-from", help="Optional old image for an isolated, real upgrade rehearsal")
+    parser.add_argument("--http-trial", action="store_true", help="Validate explicit HTTP access and persistent login cookies")
     args = parser.parse_args()
     project = "classroom-smoke-" + uuid.uuid4().hex[:8]
     http_port, https_port = free_port(), free_port()
@@ -36,6 +40,8 @@ def main():
            "CLASSROOM_DOMAIN": "classroom.test",
            "CLASSROOM_HTTP_BIND": f"127.0.0.1:{http_port}",
            "CLASSROOM_HTTPS_BIND": f"127.0.0.1:{https_port}"}
+    if args.http_trial:
+        env.update({"CLASSROOM_SCHEME": "http", "CLASSROOM_ALLOW_INSECURE_HTTP": "1"})
     # Target only the local managed daemon, never another saved Docker context.
     for key in ["DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]:
         env.pop(key, None)
@@ -90,6 +96,32 @@ def main():
             else:
                 raise RuntimeError("容器重启后未恢复健康状态")
             run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import Lesson,Response\nassert Lesson.objects.get().title=='容器持久化演示'\nassert Response.objects.get().status=='red'\n", text=True, stdout=subprocess.DEVNULL)
+            if args.http_trial:
+                for role in ["teacher", "student"]:
+                    jar = CookieJar()
+                    client = build_opener(ProxyHandler({}), HTTPCookieProcessor(jar))
+                    base_url = f"http://127.0.0.1:{http_port}"
+                    headers = {"Host": "classroom.test", "Origin": "http://classroom.test"}
+                    username = "http_container_" + role
+                    password = secrets.token_urlsafe(24) + "!A9"
+                    def get(path):
+                        with client.open(Request(base_url + path, headers=headers), timeout=10) as response:
+                            return response.geturl(), response.read().decode()
+                    def post(path, fields):
+                        with client.open(Request(base_url + path, data=urlencode(fields).encode(), headers=headers), timeout=10) as response:
+                            return response.geturl(), response.read().decode()
+                    def token(html):
+                        return re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', html).group(1)
+                    _, html = get(f"/accounts/register/{role}/")
+                    url, html = post(f"/accounts/register/{role}/", {"username": username, "password1": password, "password2": password, "csrfmiddlewaretoken": token(html)})
+                    assert url.endswith(f"/{role}/"), "HTTP signup session did not persist"
+                    assert any(c.name == "sessionid" and not c.secure for c in jar)
+                    post("/accounts/logout/", {"csrfmiddlewaretoken": token(html)})
+                    _, html = get("/accounts/login/")
+                    url, _ = post("/accounts/login/", {"username": username, "password": password, "csrfmiddlewaretoken": token(html)})
+                    assert url.endswith(f"/{role}/"), "HTTP login session did not persist"
+                run("exec", "-T", "web", "python", "manage.py", "check_login_access")
+                print("HTTP容器验证通过：师生注册、退出后重新登录、会话Cookie均正确，不再回到登录页。")
             run("exec", "-T", "web", "python", "manage.py", "backup_classroom", "--output", "/data/backup-smoke.sqlite3")
             print("通过：Compose服务、HTTP反向代理、静态文件、健康检查、容器重启后数据持久化、容器内备份。未申请真实域名TLS证书。")
         finally:

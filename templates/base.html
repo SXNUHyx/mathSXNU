@@ -20,7 +20,7 @@
       {% else %}<a href="{% url 'login' %}?next={{ auth_next|urlencode }}">登录</a><a href="{% url 'register_choice' %}?next={{ auth_next|urlencode }}" class="nav-teacher">注册</a>{% endif %}
     </nav>
   </header>
-  <main id="main">{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
+  <main id="main">{% if http_trial %}<div class="notice transport-warning" role="note">当前为 HTTP 功能试用，密码和反馈不加密。请使用测试账号，正式教学前切换到 HTTPS。</div>{% endif %}{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
   <footer class="site-footer"><span>mathSXNU · 让每一次困惑，都有回应</span><span>课堂即时反馈 · 不用于考勤或成绩评定</span></footer>
 </body>
 </html>

@@ -1,4 +1,5 @@
 from functools import wraps
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from .models import AccountProfile
@@ -16,7 +17,7 @@ def account_role(user):
 
 
 def account_context(request):
-    return {"account_role": account_role(request.user)}
+    return {"account_role": account_role(request.user), "http_trial": settings.ALLOW_INSECURE_HTTP}
 
 
 def teacher_required(view):

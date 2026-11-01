@@ -5,6 +5,7 @@ Run with a Python interpreter that has Playwright installed:
 Default Chromium path: /usr/bin/chromium (override CHROMIUM_PATH).
 """
 import json
+import argparse
 import os
 from pathlib import Path
 import secrets
@@ -21,27 +22,43 @@ PYTHON = str(ROOT / ".venv/bin/python")
 ARTIFACTS = ROOT / ".local/screenshots"
 ARTIFACTS.mkdir(parents=True, exist_ok=True)
 password = secrets.token_urlsafe(24)
+parser = argparse.ArgumentParser()
+parser.add_argument("--http-production", action="store_true", help="Use a non-localhost HTTP origin with explicit trial mode")
+args = parser.parse_args()
 
 with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
     env = {**os.environ, "DJANGO_DB_PATH": str(Path(tmp) / "test.sqlite3"), "DJANGO_DEBUG": "1"}
+    if args.http_production:
+        env.update({"DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": secrets.token_urlsafe(64),
+                    "DJANGO_ALLOW_INSECURE_HTTP": "1", "DJANGO_SSL_REDIRECT": "0",
+                    "DJANGO_ALLOWED_HOSTS": "classroom.test,127.0.0.1"})
     subprocess.run([PYTHON, "manage.py", "migrate", "--noinput"], cwd=ROOT, env=env, check=True, stdout=subprocess.DEVNULL)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    base = f"http://127.0.0.1:{port}"
+    base = f"http://{'classroom.test' if args.http_production else '127.0.0.1'}:{port}"
+    env["DJANGO_PUBLIC_ORIGIN"] = base
     # Gunicorn + collected assets exercise the deployment path, not just Django's test client.
     server = subprocess.Popen([str(ROOT / ".venv/bin/gunicorn"), "mathsxnu.wsgi:application", "--bind", f"127.0.0.1:{port}", "--workers", "1", "--threads", "4"], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):
             try:
-                urlopen(base, timeout=1).close()
+                urlopen(f"http://127.0.0.1:{port}/health/", timeout=1).close()
                 break
             except OSError:
                 if server.poll() is not None:
                     raise RuntimeError("Smoke-test server exited before startup")
                 time.sleep(.1)
         with sync_playwright() as p:
-            browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium"), args=["--no-sandbox"])
+            browser_args = ["--no-sandbox"]
+            browser_options = {}
+            if args.http_production:
+                browser_args.append("--host-resolver-rules=MAP classroom.test 127.0.0.1")
+                proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+                if proxy:
+                    # Only the synthetic hostname mapped to loopback avoids the proxy.
+                    browser_options["proxy"] = {"server": proxy, "bypass": "classroom.test,127.0.0.1,localhost"}
+            browser = p.chromium.launch(executable_path=os.environ.get("CHROMIUM_PATH", "/usr/bin/chromium"), args=browser_args, **browser_options)
             errors = []
             teacher_context = browser.new_context(viewport={"width": 1440, "height": 1000})
             teacher = teacher_context.new_page()
@@ -56,6 +73,15 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.get_by_role("button", name="注册教师账号").click()
             # Already signed in: revisiting login must lead to the classroom portal.
             teacher.goto(base + "/accounts/login/")
+            teacher.get_by_role("heading", name="每一个信号，都值得看见。", exact=True).wait_for()
+            if args.http_production:
+                cookies = teacher_context.cookies(base)
+                assert any(c["name"] == "sessionid" and not c["secure"] for c in cookies)
+            teacher.get_by_role("button", name="退出", exact=True).click()
+            teacher.goto(base + "/accounts/login/")
+            teacher.get_by_label("用户名", exact=True).fill("browser_teacher")
+            teacher.get_by_label("密码", exact=True).fill(password)
+            teacher.get_by_role("button", name="登录", exact=False).click()
             teacher.get_by_role("heading", name="每一个信号，都值得看见。", exact=True).wait_for()
             teacher.get_by_role("link", name="创建我的第一个课堂").click()
             teacher.get_by_label("课程名称").fill("高等数学 · 演示课堂")
@@ -124,7 +150,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             assert student.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
             browser.close()
-        print(json.dumps({"result": "passed", "checks": ["教师前端注册与创建课堂", "学生手机注册后返回课堂", "学生跨浏览器登录只计一份", "学生不能访问教师页面", "我的学习", "5秒自动更新", "CSV下载", "结束课堂", "移动端无横向溢出", "无JavaScript异常"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["教师注册与退出后重新登录", "学生手机注册后返回课堂", "学生跨浏览器登录只计一份", "学生不能访问教师页面", "我的学习", "5秒自动更新", "CSV下载", "结束课堂", "移动端无横向溢出", "无JavaScript异常"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)

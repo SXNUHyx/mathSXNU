@@ -8,7 +8,9 @@ services:
       DJANGO_DEBUG: "0"
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?请先运行 python3 scripts/configure-deployment.py}
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,${CLASSROOM_DOMAIN:?请先设置课堂域名}
-      DJANGO_CSRF_TRUSTED_ORIGINS: https://${CLASSROOM_DOMAIN}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${CLASSROOM_SCHEME:-https}://${CLASSROOM_DOMAIN}
+      DJANGO_PUBLIC_ORIGIN: ${CLASSROOM_SCHEME:-https}://${CLASSROOM_DOMAIN}
+      DJANGO_ALLOW_INSECURE_HTTP: ${CLASSROOM_ALLOW_INSECURE_HTTP:-0}
       DJANGO_DB_PATH: /data/db.sqlite3
       DJANGO_TRUST_PROXY: "1"
     volumes:
@@ -33,7 +35,7 @@ services:
       web:
         condition: service_healthy
     environment:
-      CLASSROOM_DOMAIN: ${CLASSROOM_DOMAIN}
+      CLASSROOM_DOMAIN: ${CLASSROOM_SCHEME:-https}://${CLASSROOM_DOMAIN}
       NO_PROXY: web,localhost,127.0.0.1
       no_proxy: web,localhost,127.0.0.1
     ports:
