@@ -85,6 +85,14 @@ def main():
                 run("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
                 run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import AccountProfile,Response\nassert AccountProfile.objects.get(user__username='container_test').role=='teacher'\nassert Response.objects.get().user_id is None\n", text=True, stdout=subprocess.DEVNULL)
                 print("旧版到注册版升级通过：原普通教师自动保留教师身份，历史反馈保留且不误绑账号。")
+            course_file_seed = (
+                "from feedback.models import Lesson,KnowledgeBlock,CourseMaterial\n"
+                "from django.core.files.base import ContentFile\n"
+                "lesson=Lesson.objects.get()\n"
+                "block=KnowledgeBlock.objects.create(lesson=lesson,title='持久知识点',body=r'\\(x^2\\)')\n"
+                "CourseMaterial.objects.create(lesson=lesson,block=block,title='持久课程文件',file=ContentFile(b'%PDF-1.7\\nfixture',name='fixture.pdf'),original_name='fixture.pdf',content_type='application/pdf',size=16,is_image=False)\n"
+            )
+            run("exec", "-T", "web", "python", "manage.py", "shell", input=course_file_seed, text=True, stdout=subprocess.DEVNULL)
             run("restart", "web")
             for _ in range(50):
                 try:
@@ -96,6 +104,7 @@ def main():
             else:
                 raise RuntimeError("容器重启后未恢复健康状态")
             run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import Lesson,Response\nassert Lesson.objects.get().title=='容器持久化演示'\nassert Response.objects.get().status=='red'\n", text=True, stdout=subprocess.DEVNULL)
+            run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import CourseMaterial,KnowledgeBlock\nfrom django.conf import settings\nfrom pathlib import Path\nm=CourseMaterial.objects.get()\nassert str(settings.MEDIA_ROOT)=='/data/media'\nassert Path(m.file.path).read_bytes()==b'%PDF-1.7\\nfixture'\nassert KnowledgeBlock.objects.get().title=='持久知识点'\n",text=True,stdout=subprocess.DEVNULL)
             if args.http_trial:
                 for role in ["teacher", "student"]:
                     jar = CookieJar()
@@ -123,6 +132,14 @@ def main():
                 run("exec", "-T", "web", "python", "manage.py", "check_login_access")
                 print("HTTP容器验证通过：师生注册、退出后重新登录、会话Cookie均正确，不再回到登录页。")
             run("exec", "-T", "web", "python", "manage.py", "backup_classroom", "--output", "/data/backup-smoke.sqlite3")
+            run("exec", "-T", "web", "python", "manage.py", "backup_course_files", "--output", "/data/materials-smoke.tar.gz")
+            archive = Path(tmp) / "materials-smoke.tar.gz"
+            run("cp", "web:/data/materials-smoke.tar.gz", str(archive))
+            import tarfile
+            with tarfile.open(archive) as source:
+                names = source.getnames()
+                assert len(names) == 1 and names[0].startswith("media/")
+                assert source.extractfile(names[0]).read() == b"%PDF-1.7\nfixture"
             print("通过：Compose服务、HTTP反向代理、静态文件、健康检查、容器重启后数据持久化、容器内备份。未申请真实域名TLS证书。")
         finally:
             # Only our random test project's synthetic volumes are removed.

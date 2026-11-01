@@ -3,6 +3,7 @@ import secrets
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+ASSET_VERSION = "20261101-learning"
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOW_INSECURE_HTTP = os.environ.get("DJANGO_ALLOW_INSECURE_HTTP", "0") == "1"
 PUBLIC_ORIGIN = os.environ.get("DJANGO_PUBLIC_ORIGIN", "")
@@ -70,6 +71,8 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_ROOT = Path(os.environ.get("DJANGO_MEDIA_ROOT", str(BASE_DIR / ".local" / "media")))
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2_500_000
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "teacher_home"

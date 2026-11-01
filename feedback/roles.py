@@ -17,7 +17,8 @@ def account_role(user):
 
 
 def account_context(request):
-    return {"account_role": account_role(request.user), "http_trial": settings.ALLOW_INSECURE_HTTP}
+    return {"account_role": account_role(request.user), "http_trial": settings.ALLOW_INSECURE_HTTP,
+            "asset_version": settings.ASSET_VERSION}
 
 
 def teacher_required(view):

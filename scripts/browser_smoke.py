@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.screenshot(path=str(ARTIFACTS / "home-desktop.png"), full_page=True)
             teacher.get_by_role("link", name="教师注册", exact=True).click()
             teacher.screenshot(path=str(ARTIFACTS / "teacher-register-desktop.png"), full_page=True)
-            teacher.get_by_label("用户名", exact=True).fill("browser_teacher")
+            teacher.get_by_label("用户名", exact=False).fill("王老师")
             teacher.get_by_label("密码", exact=True).fill(password)
             teacher.get_by_label("密码确认", exact=True).fill(password)
             teacher.get_by_role("button", name="注册教师账号").click()
@@ -79,17 +79,37 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
                 assert any(c["name"] == "sessionid" and not c["secure"] for c in cookies)
             teacher.get_by_role("button", name="退出", exact=True).click()
             teacher.goto(base + "/accounts/login/")
-            teacher.get_by_label("用户名", exact=True).fill("browser_teacher")
+            teacher.get_by_label("用户名", exact=False).fill("王老师")
             teacher.get_by_label("密码", exact=True).fill(password)
             teacher.get_by_role("button", name="登录", exact=False).click()
             teacher.get_by_role("heading", name="每一个信号，都值得看见。", exact=True).wait_for()
             teacher.get_by_role("link", name="创建我的第一个课堂").click()
-            teacher.get_by_label("课程名称").fill("高等数学 · 演示课堂")
-            teacher.get_by_label("本次课堂 / 知识点").fill("连续与可导的关系")
+            teacher.get_by_label("课程名称").fill("统计学 · 演示课程")
+            teacher.get_by_label("本次课堂 / 知识点").fill("均值与方差")
             teacher.get_by_label("预计参与人数").fill("40")
             teacher.get_by_role("button", name="创建并获取课堂码").click()
             teacher.wait_for_selector("#dashboard")
             student_url = teacher.locator("#student-link").input_value()
+            dashboard_url = teacher.url
+            for kind, title in [("knowledge", "总体均值"), ("key", "重点公式"), ("difficult", "方差的含义")]:
+                teacher.get_by_role("link", name="＋ 添加模块", exact=True).click()
+                teacher.get_by_label("模块类型").select_option(kind)
+                teacher.get_by_label("模块标题").fill(title)
+                teacher.get_by_label("内容（支持LaTeX）", exact=True).fill(r"期望定义：\[E(X)=\sum_i x_i p_i\]")
+                teacher.locator('.math-preview .katex').first.wait_for()
+                teacher.get_by_role("button", name="保存模块", exact=True).click()
+            from PIL import Image
+            image_path = Path(tmp) / "知识点图片.png"
+            Image.new("RGB", (160, 100), "#dbeede").save(image_path)
+            pdf_path = Path(tmp) / "课程资料.pdf"
+            teacher.pdf(path=str(pdf_path))
+            for title, path in [("均值示意图", image_path), ("课程讲义PDF", pdf_path)]:
+                teacher.get_by_role("link", name="上传图片 / 资料", exact=True).click()
+                teacher.get_by_label("资料或图片名称").fill(title)
+                if path.suffix == ".png":
+                    teacher.get_by_label("关联模块（选填）", exact=True).select_option(label="知识点 · 总体均值")
+                teacher.get_by_label("选择文件", exact=True).set_input_files(str(path))
+                teacher.get_by_role("button", name="上传并发布", exact=True).click()
             mobile_context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
             student = mobile_context.new_page()
             student.on("pageerror", lambda e: errors.append(str(e)))
@@ -98,24 +118,43 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.get_by_role("navigation").get_by_role("link", name="注册", exact=True).click()
             student.get_by_role("link", name="我是学生，参与课堂", exact=False).click()
             student.screenshot(path=str(ARTIFACTS / "student-register-mobile.png"), full_page=True)
-            student.get_by_label("用户名", exact=True).fill("browser_student")
+            student.get_by_label("用户名", exact=False).fill("张小明")
             student.get_by_label("密码", exact=True).fill(password)
             student.get_by_label("密码确认", exact=True).fill(password)
             student.get_by_role("button", name="注册学生账号").click()
             assert student.url == student_url
+            student.get_by_label('姓名', exact=True).fill('张小明')
+            student.get_by_label('学号', exact=True).fill('0012026001')
             student.get_by_role("radio", name="需要帮助").check()
-            student.get_by_label("想让老师多讲一点什么").fill("为什么连续不一定可导？想再看一个反例。")
+            student.get_by_label("想让老师多讲一点什么").fill("方差为什么不能直接用均值代替？")
             student.get_by_role("button", name="把信号送给老师").click()
             student.get_by_role("status").filter(has_text="反馈已送达老师").wait_for()
             student.screenshot(path=str(ARTIFACTS / "student-mobile.png"), full_page=True)
             teacher.wait_for_function("document.querySelector('#count-red').textContent === '1'", timeout=10000)
             teacher.wait_for_timeout(500)  # Let the chart's short CSS transition settle for the screenshot.
             assert teacher.locator("#total").inner_text() == "1"
+            assert "张小明" in teacher.locator('#notes').inner_text()
+            assert "0012026001" in teacher.locator('#notes').inner_text()
+            teacher.get_by_role('link', name='回复这位学生', exact=False).first.click()
+            teacher.get_by_label('给学生的解释', exact=True).fill(r"方差刻画波动：\(\operatorname{Var}(X)=E[X^2]-E[X]^2\)。请先计算偏差。")
+            teacher.get_by_role('button', name='发送解释', exact=False).click()
+            student.wait_for_function("document.querySelector('#reply-list').textContent.includes('方差刻画波动')", timeout=12000)
+            student.locator('#reply-list .katex').first.wait_for()
+            student.locator('#teacher-replies').screenshot(path=str(ARTIFACTS / 'student-replies.png'))
+            student.get_by_role('button', name='标记以上回复为已读', exact=True).click()
+            student.wait_for_function("document.querySelector('#reply-list').textContent.includes('已读')", timeout=10000)
+            image = student.get_by_alt_text('均值示意图', exact=True).first
+            image.scroll_into_view_if_needed()
+            image.wait_for()
+            assert image.evaluate('(img) => img.complete && img.naturalWidth > 0')
+            with student.expect_download() as file_download:
+                student.get_by_role('link', name='课程讲义PDF', exact=False).first.click()
+            assert file_download.value.suggested_filename.endswith('.pdf')
             # A new browser logged into the same student account sees and updates one response.
             second_context = browser.new_context(viewport={"width": 1366, "height": 900})
             second = second_context.new_page()
             second.goto(student_url)
-            second.get_by_label("用户名", exact=True).fill("browser_student")
+            second.get_by_label("用户名", exact=False).fill("张小明")
             second.get_by_label("密码", exact=True).fill(password)
             second.get_by_role("button", name="登录", exact=False).click()
             assert second.url == student_url
@@ -128,7 +167,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.goto(base + "/student/")
             student.get_by_role("heading", name="我的学习", exact=True).wait_for()
             student.goto(student_url)
-            assert "为什么连续不一定可导" in teacher.locator("#notes").inner_text()
+            assert "方差为什么不能直接用均值代替" in teacher.locator("#notes").inner_text()
             teacher.screenshot(path=str(ARTIFACTS / "teacher-desktop.png"), full_page=True)
             student.get_by_role("radio", name="听懂了").check()
             student.get_by_role("button", name="更新我的反馈").click()
@@ -140,17 +179,26 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.get_by_role("button", name="结束本次收集").click()
             student.reload()
             student.get_by_role("heading", name="感谢你的课堂反馈").wait_for()
-            assert student.locator('button[type="submit"]').count() == 0
+            assert student.locator('#feedback-form').count() == 0
             # Mobile dashboard and homepage must not overflow horizontally.
             teacher.set_viewport_size({"width": 390, "height": 844})
             teacher.screenshot(path=str(ARTIFACTS / "teacher-mobile.png"), full_page=True)
             assert teacher.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+            teacher.get_by_role('link', name='删除课堂', exact=True).click()
+            teacher.get_by_role('button', name='确认删除课堂', exact=True).click()
+            assert teacher.locator('.lesson-card').count() == 0
+            result = student.goto(student_url)
+            assert result.status == 404
+            teacher.get_by_role('link', name='课堂回收站', exact=False).click()
+            teacher.get_by_role('button', name='恢复课堂', exact=True).click()
+            assert teacher.locator('.knowledge-block').count() == 3
+            assert '方差刻画波动' in teacher.locator('#notes').inner_text()
             student.goto(base)
             student.screenshot(path=str(ARTIFACTS / "home-mobile.png"), full_page=True)
             assert student.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
             browser.close()
-        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["教师注册与退出后重新登录", "学生手机注册后返回课堂", "学生跨浏览器登录只计一份", "学生不能访问教师页面", "我的学习", "5秒自动更新", "CSV下载", "结束课堂", "移动端无横向溢出", "无JavaScript异常"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "知识点重点难点模块", "LaTeX编辑预览及学生渲染", "图片上传与受保护读取", "PDF上传下载", "姓名学号反馈", "教师回复自动到达学生端", "回复已读", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "CSV下载", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)

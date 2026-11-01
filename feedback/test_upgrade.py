@@ -10,7 +10,7 @@ from django.urls import reverse
 class RegistrationUpgradeTests(TransactionTestCase):
     def test_existing_teachers_passwords_classrooms_and_anonymous_records_survive(self):
         old = [("feedback", "0002_loginthrottle")]
-        new = [("feedback", "0004_preserve_existing_teacher_accounts")]
+        new = MigrationExecutor(connection).loader.graph.leaf_nodes("feedback")
         self.addCleanup(lambda: MigrationExecutor(connection).migrate(new))
         executor = MigrationExecutor(connection)
         executor.migrate(old)

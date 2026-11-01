@@ -1,0 +1,4 @@
+<article class="material-card">
+{% if material.is_image %}<a href="{% url 'material_file' material.pk %}" target="_blank" rel="noopener"><img src="{% url 'material_file' material.pk %}" loading="lazy" alt="{{ material.title }}"></a>{% endif %}
+<a class="text-link" href="{% url 'material_file' material.pk %}" {% if material.is_image %}target="_blank" rel="noopener"{% endif %}>{{ material.title }} {% if not material.is_image %}↓{% endif %}</a><small class="muted">{{ material.original_name }} · {{ material.size|filesizeformat }}</small>
+{% if manage_content %}<form method="post" action="{% url 'material_delete' lesson.code material.pk %}" data-confirm="从课堂移除此资料？">{% csrf_token %}<button type="submit" class="nav-button small">移除资料</button></form>{% endif %}</article>

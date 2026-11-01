@@ -1,7 +1,9 @@
 from django import forms
+import unicodedata
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from .models import Lesson, Response
+from .models import Lesson, Response, KnowledgeBlock, CourseMaterial
+from .uploads import inspect_upload
 
 
 class JoinForm(forms.Form):
@@ -23,21 +25,29 @@ class LessonForm(forms.ModelForm):
         fields = ["course", "title", "expected_count"]
         labels = {"course": "课程名称", "title": "本次课堂 / 知识点"}
         widgets = {
-            "course": forms.TextInput(attrs={"placeholder": "例如：高等数学 · 一年级"}),
-            "title": forms.TextInput(attrs={"placeholder": "例如：连续与可导的关系"}),
+            "course": forms.TextInput(attrs={"placeholder": "请输入课程名称"}),
+            "title": forms.TextInput(attrs={"placeholder": "请输入本次课堂主题"}),
         }
 
 
 class ResponseForm(forms.Form):
     status = forms.ChoiceField(choices=Response.Status.choices)
     note = forms.CharField(max_length=300, required=False, strip=True)
+    real_name = forms.CharField(max_length=50, label="姓名")
+    student_number = forms.RegexField(regex=r"^[A-Za-z0-9_-]{1,40}$", max_length=40, label="学号", error_messages={"invalid": "学号请使用数字、英文字母、下划线或连字符。"})
+
+    def clean_real_name(self):
+        value = self.cleaned_data["real_name"]
+        if any(ord(c) < 32 for c in value):
+            raise forms.ValidationError("姓名不能包含换行等控制字符。")
+        return value
 
 
 class RegistrationForm(UserCreationForm):
     username = forms.RegexField(
-        regex=r"^[A-Za-z0-9_]{3,30}$", min_length=3, max_length=30, label="用户名",
-        help_text="使用3—30位英文字母、数字或下划线；注册后统一保存为小写。",
-        error_messages={"invalid": "用户名只能包含3—30位英文字母、数字或下划线。"},
+        regex=r"^\w{1,30}$", min_length=1, max_length=30, label="用户名（支持中文）",
+        help_text="支持1—30位汉字、英文字母、数字或下划线，例如“王小明”；英文统一保存为小写。重名时可添加数字。",
+        error_messages={"invalid": "用户名只能包含1—30位汉字、英文字母、数字或下划线。"},
         widget=forms.TextInput(attrs={"autocomplete": "username", "autocapitalize": "none"}),
     )
 
@@ -46,7 +56,7 @@ class RegistrationForm(UserCreationForm):
         fields = ["username"]
 
     def clean_username(self):
-        username = self.cleaned_data["username"].lower()
+        username = unicodedata.normalize("NFKC", self.cleaned_data["username"]).lower()
         if get_user_model().objects.filter(username__iexact=username).exists():
             raise forms.ValidationError("这个用户名已被使用，请换一个。")
         return username
@@ -61,3 +71,33 @@ class PlatformAuthenticationForm(AuthenticationForm):
             return username
         matches = list(users.filter(username__iexact=username).values_list("username", flat=True)[:2])
         return matches[0] if len(matches) == 1 else username
+
+
+class KnowledgeBlockForm(forms.ModelForm):
+    class Meta:
+        model = KnowledgeBlock
+        fields = ["kind", "title", "body", "position"]
+        labels = {"kind": "模块类型", "title": "模块标题", "body": "内容（支持LaTeX）", "position": "排序（较小的排在前面）"}
+        widgets = {"body": forms.Textarea(attrs={"rows": 8, "class": "latex-editor", "placeholder": r"可输入文字与公式，例如：\(\frac{a}{b}\)，独立公式使用 \[...\]"})}
+
+
+class CourseMaterialForm(forms.ModelForm):
+    class Meta:
+        model = CourseMaterial
+        fields = ["title", "block", "file"]
+        labels = {"title": "资料或图片名称", "block": "关联模块（选填）", "file": "选择文件"}
+        widgets = {"file": forms.FileInput(attrs={"accept": ".jpg,.jpeg,.png,.webp,.pdf,.ppt,.pptx"})}
+
+    def __init__(self, *args, lesson, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["block"].queryset = lesson.blocks.all()
+
+    def clean_file(self):
+        uploaded = self.cleaned_data["file"]
+        self.inspected_type, self.inspected_image = inspect_upload(uploaded)
+        return uploaded
+
+
+class ReplyForm(forms.Form):
+    message = forms.CharField(max_length=5000, label="给学生的解释", widget=forms.Textarea(attrs={"rows": 4, "class": "latex-editor"}))
+    event_id = forms.IntegerField(required=False, min_value=1, widget=forms.HiddenInput)

@@ -26,7 +26,7 @@ def pending_classroom(request):
     match = landing_match(request, target)
     if match and match.url_name == "student":
         code = match.kwargs["code"].upper()
-        if Lesson.objects.filter(code=code).exists():
+        if Lesson.objects.filter(code=code, deleted_at__isnull=True).exists():
             return reverse("student", args=[code])
     if target:
         request.session.pop(PENDING_CLASSROOM, None)
@@ -38,7 +38,7 @@ def remember_classroom(request):
     match = landing_match(request, target)
     if match and match.url_name == "student":
         code = match.kwargs["code"].upper()
-        if Lesson.objects.filter(code=code).exists():
+        if Lesson.objects.filter(code=code, deleted_at__isnull=True).exists():
             request.session[PENDING_CLASSROOM] = reverse("student", args=[code])
 
 
@@ -67,10 +67,10 @@ def authentication_destination(request, user):
         if role == "teacher":
             if name in {"teacher_home", "lesson_create"}:
                 return reverse(name)
-            if name in {"student", "dashboard"} and Lesson.objects.filter(code=code, teacher=user).exists():
+            if name in {"student", "dashboard"} and Lesson.objects.filter(code=code, teacher=user, deleted_at__isnull=True).exists():
                 return reverse("dashboard", args=[code])
         elif name == "student_home":
             return reverse("student_home")
-        elif name == "student" and Lesson.objects.filter(code=code).exists():
+        elif name == "student" and Lesson.objects.filter(code=code, deleted_at__isnull=True).exists():
             return reverse("student", args=[code])
     return reverse("teacher_home" if role == "teacher" else "student_home")

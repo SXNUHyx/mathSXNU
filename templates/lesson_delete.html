@@ -1,0 +1,2 @@
+{% extends 'base.html' %}{% block title %}删除课堂 · 课堂信号{% endblock %}
+{% block content %}<section class="panel narrow"><h1 class="page-title">删除这个课堂？</h1><h2>{{ lesson.course }} · {{ lesson.title }}</h2><p>删除后学生无法访问课堂、资料和教师回复。课堂会移入回收站，原反馈、资料与回复保留，可以恢复。</p><form method="post">{% csrf_token %}<input type="hidden" name="confirm" value="yes"><button class="button quiet full" type="submit">确认删除课堂</button></form><a class="button secondary full" href="{% url 'dashboard' lesson.code %}">取消，返回课堂</a></section>{% endblock %}

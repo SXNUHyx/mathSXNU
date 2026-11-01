@@ -2,7 +2,7 @@
 {% block title %}我的课堂 · 课堂信号{% endblock %}
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">教师工作台 / {{ user.username }}</p><h1 class="page-title">每一个信号，都值得看见。</h1><p class="muted">为每次课创建独立的反馈空间，保留真实的学习声音。</p></div><a class="button primary" href="{% url 'lesson_create' %}">＋ 创建课堂</a></div>
-<div class="list-heading"><h2>我的课堂 <span class="count-pill">{{ lessons|length }}</span></h2><span class="muted small">按创建时间排列</span></div>
+<div class="list-heading"><h2>我的课堂 <span class="count-pill">{{ lessons|length }}</span></h2><a class="text-link small" href="{% url 'lesson_trash' %}">课堂回收站 →</a></div>
 <div class="lesson-grid">
 {% for lesson in lessons %}
 <a class="panel lesson-card" href="{% url 'dashboard' lesson.code %}"><div class="spread"><span class="eyebrow">{{ lesson.course }}</span><span class="badge {% if lesson.is_open %}open{% endif %}">{% if lesson.is_open %}接收中{% else %}已结束{% endif %}</span></div><h2>{{ lesson.title }}</h2><p class="muted">{{ lesson.created_at|date:'Y年m月d日 H:i' }}</p><div class="lesson-card-bottom"><span><b>{{ lesson.response_count }}</b> 份当前反馈</span><span>查看课堂 ↗</span></div></a>

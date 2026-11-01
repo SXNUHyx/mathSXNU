@@ -4,15 +4,16 @@ from collections import Counter
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import IntegrityError, transaction
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import HttpResponse, HttpResponseBadRequest, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .forms import JoinForm, LessonForm, ResponseForm
-from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership
+from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership, TeacherReply
 from .roles import account_role, teacher_required
+from .learning import content_context, feedback_payload, reply_payload
 
 STATUSES = [
     {"value": "green", "label": "听懂了", "description": "思路清楚，可以继续", "symbol": "✓"},
@@ -39,7 +40,7 @@ def join(request):
     data["code"] = data.get("code", "").strip().upper()
     form = JoinForm(data)
     if form.is_valid():
-        lesson = Lesson.objects.filter(code=form.cleaned_data["code"]).first()
+        lesson = Lesson.objects.filter(code=form.cleaned_data["code"], deleted_at__isnull=True).first()
         if lesson:
             return redirect("student", code=lesson.code)
         form.add_error("code", "没有找到这个课堂，请向老师确认课堂码。")
@@ -49,7 +50,7 @@ def join(request):
 @teacher_required
 def teacher_home(request):
     from django.db.models import Count
-    lessons = Lesson.objects.filter(teacher=request.user).annotate(response_count=Count("responses"))
+    lessons = Lesson.objects.filter(teacher=request.user, deleted_at__isnull=True).annotate(response_count=Count("responses"))
     return render(request, "teacher_home.html", {"lessons": lessons})
 
 
@@ -75,7 +76,7 @@ def lesson_create(request):
 def student_home(request):
     if account_role(request.user) == "teacher":
         return redirect("teacher_home")
-    memberships = list(request.user.classroom_memberships.select_related("lesson"))
+    memberships = list(request.user.classroom_memberships.filter(lesson__deleted_at__isnull=True).select_related("lesson"))
     responses = {r.lesson_id: r for r in request.user.classroom_responses.all()}
     return render(request, "student_home.html", {
         "classrooms": [{"lesson": m.lesson, "response": responses.get(m.lesson_id)} for m in memberships],
@@ -84,17 +85,26 @@ def student_home(request):
 
 
 def owned_lesson(request, code):
-    return get_object_or_404(Lesson, code=code, teacher=request.user)
+    return get_object_or_404(Lesson, code=code, teacher=request.user, deleted_at__isnull=True)
 
 
-def summary(lesson):
+def summary(lesson, page_number=1):
     # Materialize one snapshot, so the chart, notes and denominator agree.
-    responses = list(lesson.responses.order_by("-updated_at"))
+    from django.db.models import OuterRef, Subquery
+    event = lesson.events.filter(participant=OuterRef("participant")).order_by("-pk").values("pk")[:1]
+    responses = list(lesson.responses.select_related("user", "lesson").annotate(latest_event_id=Subquery(event)).order_by("-updated_at", "-pk"))
     counts = Counter(r.status for r in responses)
     total = len(responses)
     rows = [{**s, "count": counts[s["value"]], "percent": round(counts[s["value"]] / total * 100, 1) if total else 0} for s in STATUSES]
-    notes = [{"status": r.status, "label": r.get_status_display(), "text": r.note,
-              "time": timezone.localtime(r.updated_at).strftime("%H:%M:%S")} for r in responses if r.note][:50]
+    pages = max(1, (total + 49) // 50)
+    try:
+        page = min(pages, max(1, int(page_number)))
+    except (TypeError, ValueError):
+        page = 1
+    selected = responses[(page - 1) * 50:page * 50]
+    from django.db.models import prefetch_related_objects
+    prefetch_related_objects(selected, "replies")
+    notes = [feedback_payload(r) for r in selected]
     return {
         "total": total, "rows": rows, "notes": notes, "is_open": lesson.is_open,
         "expected_count": lesson.expected_count,
@@ -102,6 +112,7 @@ def summary(lesson):
         "updated": timezone.localtime().strftime("%H:%M:%S"),
         "account_count": sum(r.user_id is not None for r in responses),
         "legacy_count": sum(r.user_id is None for r in responses),
+        "page": page, "pages": pages,
     }
 
 
@@ -109,16 +120,19 @@ def summary(lesson):
 @never_cache
 def dashboard(request, code):
     lesson = owned_lesson(request, code)
+    data = summary(lesson, request.GET.get("feedback_page", 1))
     return render(request, "dashboard.html", {
-        "lesson": lesson, "summary": summary(lesson),
+        "lesson": lesson, "summary": data,
         "student_url": request.build_absolute_uri(reverse("student", args=[code])),
+        "manage_content": True,
+        **content_context(lesson),
     })
 
 
 @teacher_required
 @never_cache
 def lesson_stats(request, code):
-    return JsonResponse(summary(owned_lesson(request, code)))
+    return JsonResponse(summary(owned_lesson(request, code), request.GET.get("feedback_page", 1)))
 
 
 @teacher_required
@@ -141,7 +155,7 @@ def toggle_lesson(request, code):
     if action not in {"open", "close"}:
         return HttpResponseBadRequest("请选择开放或结束课堂。")
     with transaction.atomic():
-        lesson = get_object_or_404(Lesson.objects.select_for_update(), code=code, teacher=request.user)
+        lesson = get_object_or_404(Lesson.objects.select_for_update(), code=code, teacher=request.user, deleted_at__isnull=True)
         lesson.is_open = action == "open"
         lesson.save(update_fields=["is_open"])
     messages.success(request, "课堂已开放，可以继续接收反馈。" if lesson.is_open else "课堂已结束，反馈记录已保留。")
@@ -151,11 +165,13 @@ def toggle_lesson(request, code):
 @login_required
 @never_cache
 def student(request, code):
-    lesson = get_object_or_404(Lesson, code=code.upper())
+    lesson = get_object_or_404(Lesson, code=code.upper(), deleted_at__isnull=True)
     if account_role(request.user) == "teacher":
+        if lesson.teacher_id != request.user.pk:
+            raise Http404
         if request.method == "POST":
             return render(request, "role_required.html", {"student_only": True}, status=403)
-        return render(request, "student.html", {"lesson": lesson, "teacher_preview": True})
+        return render(request, "student.html", {"lesson": lesson, "teacher_preview": True, **content_context(lesson)})
     profile, _ = AccountProfile.objects.get_or_create(user=request.user)
     ClassroomMembership.objects.get_or_create(lesson=lesson, student=request.user)
     participant = profile.participant
@@ -163,36 +179,45 @@ def student(request, code):
     error = None
     selected = current.status if current else ""
     note = current.note if current else ""
+    real_name = current.real_name if current and current.real_name else profile.real_name
+    student_number = current.student_number if current and current.student_number else profile.student_number
     if request.method == "POST":
         form = ResponseForm(request.POST)
         selected = request.POST.get("status", "")
         note = request.POST.get("note", "")
+        real_name = request.POST.get("real_name", "")
+        student_number = request.POST.get("student_number", "")
         if not lesson.is_open:
             error = "本次课堂已结束，暂时不能修改反馈。"
         elif not form.is_valid():
-            error = "请选择一种理解程度，补充说明请控制在300字以内。"
+            error = "请填写姓名、学号并选择理解程度；学号使用数字、字母、下划线或连字符，补充说明最多300字。"
         else:
             with transaction.atomic():
                 # Serialize closure and writes where the database supports row locks.
                 locked = Lesson.objects.select_for_update().get(pk=lesson.pk)
-                if not locked.is_open:
+                if not locked.is_open or locked.deleted_at:
                     error = "本次课堂已结束，暂时不能修改反馈。"
                 else:
                     data = form.cleaned_data
                     response, created = Response.objects.get_or_create(
                         lesson=locked, user=request.user, defaults={"participant": participant, **data},
                     )
-                    if created or response.status != data["status"] or response.note != data["note"]:
+                    if created or any(getattr(response, key) != value for key, value in data.items()):
                         if not created:
-                            response.status, response.note = data["status"], data["note"]
-                            response.save(update_fields=["status", "note", "updated_at"])
+                            for key, value in data.items():
+                                setattr(response, key, value)
+                            response.save(update_fields=[*data, "updated_at"])
                         ResponseEvent.objects.create(lesson=locked, participant=participant, user=request.user, **data)
+                    AccountProfile.objects.filter(pk=profile.pk).update(real_name=data["real_name"], student_number=data["student_number"])
             if not error:
                 messages.success(request, "反馈已送达老师。理解程度变化时，您可以再次更新。")
                 return redirect("student", code=lesson.code)
     return render(request, "student.html", {
         "lesson": lesson, "statuses": STATUSES, "current": current,
         "selected": selected, "note": note, "error": error,
+        "real_name": real_name, "student_number": student_number,
+        "replies": [reply_payload(r) for r in TeacherReply.objects.filter(response__lesson=lesson, response__user=request.user)],
+        **content_context(lesson),
     }, status=400 if error else 200)
 
 
@@ -211,7 +236,7 @@ def export_csv(request, code):
     response["Content-Disposition"] = f'attachment; filename="classroom-{code}-{"history" if history else "latest"}.csv"'
     response.write("\ufeff")
     writer = csv.writer(response)
-    writer.writerow(["课程", "课堂", "课堂码", "统计类型", "课堂内随机编号", "理解程度", "补充说明", "时间（北京时间）", "反馈来源"])
+    writer.writerow(["课程", "课堂", "课堂码", "统计类型", "课堂内随机编号", "理解程度", "补充说明", "时间（北京时间）", "反馈来源", "姓名", "学号"])
     records = lesson.events.order_by("created_at", "pk") if history else lesson.responses.order_by("updated_at", "pk")
     # Export only lesson-scoped numbering, never the browser's cross-lesson UUID.
     participants = {}
@@ -222,5 +247,6 @@ def export_csv(request, code):
                          "变更历史" if history else "当前状态", number,
                          record.get_status_display(), csv_safe(record.note),
                          timezone.localtime(when).strftime("%Y-%m-%d %H:%M:%S"),
-                         "学生账号反馈" if record.user_id is not None else "历史不记名反馈"])
+                         "学生账号反馈" if record.user_id is not None else "历史不记名反馈",
+                         csv_safe(record.real_name), csv_safe(record.student_number)])
     return response

@@ -12,6 +12,7 @@ services:
       DJANGO_PUBLIC_ORIGIN: ${CLASSROOM_SCHEME:-https}://${CLASSROOM_DOMAIN}
       DJANGO_ALLOW_INSECURE_HTTP: ${CLASSROOM_ALLOW_INSECURE_HTTP:-0}
       DJANGO_DB_PATH: /data/db.sqlite3
+      DJANGO_MEDIA_ROOT: /data/media
       DJANGO_TRUST_PROXY: "1"
     volumes:
       - classroom_data:/data

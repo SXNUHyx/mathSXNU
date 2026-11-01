@@ -23,7 +23,7 @@ class ClassroomTests(TestCase):
             user = get_user_model().objects.create_user("student_" + uuid.uuid4().hex[:12])
             client.force_login(user)
         client.get(self.student_url)
-        return client.post(self.student_url, {"status": status, "note": note})
+        return client.post(self.student_url, {"status": status, "note": note, "real_name": "测试学生", "student_number": "00123"})
 
     def stats(self):
         return self.teacher_client.get(reverse("lesson_stats", args=[self.lesson.code])).json()
@@ -121,7 +121,7 @@ class ClassroomTests(TestCase):
         csrf_client.get(self.student_url)
         self.assertEqual(csrf_client.post(self.student_url, {"status": "green"}).status_code, 403)
         token = csrf_client.cookies["csrftoken"].value
-        self.assertEqual(csrf_client.post(self.student_url, {"status": "green", "csrfmiddlewaretoken": token}).status_code, 302)
+        self.assertEqual(csrf_client.post(self.student_url, {"status": "green", "real_name": "测试学生", "student_number": "00123", "csrfmiddlewaretoken": token}).status_code, 302)
         csrf_client.force_login(self.teacher)
         self.assertEqual(csrf_client.post(reverse("toggle_lesson", args=[self.lesson.code]), {"action": "close"}).status_code, 403)
 

@@ -25,4 +25,4 @@ RUN DJANGO_DEBUG=0 DJANGO_SECRET_KEY=static-build-only-not-a-runtime-key \
     DJANGO_DB_PATH=/tmp/build.sqlite3 python manage.py collectstatic --noinput
 EXPOSE 8000
 ENTRYPOINT ["sh", "/app/scripts/container-entrypoint.sh"]
-CMD ["gunicorn", "mathsxnu.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--access-logfile", "-"]
+CMD ["gunicorn", "mathsxnu.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "120", "--access-logfile", "-"]

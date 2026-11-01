@@ -1,5 +1,8 @@
 {$CLASSROOM_DOMAIN} {
     encode zstd gzip
+    request_body {
+        max_size 30MB
+    }
     header {
         Referrer-Policy "same-origin"
         Permissions-Policy "camera=(), microphone=(), geolocation=()"

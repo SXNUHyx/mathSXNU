@@ -6,8 +6,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#185b4a">
   <title>{% block title %}课堂信号 · mathSXNU{% endblock %}</title>
-  <link rel="stylesheet" href="{% static 'app.css' %}">
-  <script src="{% static 'app.js' %}" defer></script>
+  <link rel="stylesheet" href="{% static 'app.css' %}?v={{ asset_version }}">
+  <link rel="stylesheet" href="{% static 'vendor/katex/katex.min.css' %}">
+  <script src="{% static 'vendor/katex/katex.min.js' %}" defer></script>
+  <script src="{% static 'vendor/katex/auto-render.min.js' %}" defer></script>
+  <script src="{% static 'app.js' %}?v={{ asset_version }}" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -15,12 +18,12 @@
     <nav aria-label="主导航">
       <a href="{% url 'home' %}">学生入口</a>
       {% if user.is_authenticated %}
-        {% if account_role == 'teacher' %}<a href="{% url 'teacher_home' %}">我的课堂</a>{% else %}<a href="{% url 'student_home' %}">我的学习</a>{% endif %}
+        {% if account_role == 'teacher' %}<a href="{% url 'teacher_home' %}">我的课堂</a>{% else %}<a href="{% url 'student_home' %}">我的学习 <span id="unread-count" hidden></span></a>{% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
       {% else %}<a href="{% url 'login' %}?next={{ auth_next|urlencode }}">登录</a><a href="{% url 'register_choice' %}?next={{ auth_next|urlencode }}" class="nav-teacher">注册</a>{% endif %}
     </nav>
   </header>
-  <main id="main">{% if http_trial %}<div class="notice transport-warning" role="note">当前为 HTTP 功能试用，密码和反馈不加密。请使用测试账号，正式教学前切换到 HTTPS。</div>{% endif %}{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
+  <main id="main">{% if http_trial %}<div class="notice transport-warning" role="note">当前为 HTTP 功能试用，密码和反馈不加密。请使用测试账号，正式教学前切换到 HTTPS。</div>{% endif %}{% if account_role == 'student' %}<div id="student-notifications" data-url="{% url 'student_notifications' %}" aria-live="polite"></div>{% endif %}{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
   <footer class="site-footer"><span>mathSXNU · 让每一次困惑，都有回应</span><span>课堂即时反馈 · 不用于考勤或成绩评定</span></footer>
 </body>
 </html>
