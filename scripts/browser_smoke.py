@@ -54,6 +54,9 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.get_by_label("密码", exact=True).fill(password)
             teacher.get_by_label("密码确认", exact=True).fill(password)
             teacher.get_by_role("button", name="注册教师账号").click()
+            # Already signed in: revisiting login must lead to the classroom portal.
+            teacher.goto(base + "/accounts/login/")
+            teacher.get_by_role("heading", name="每一个信号，都值得看见。", exact=True).wait_for()
             teacher.get_by_role("link", name="创建我的第一个课堂").click()
             teacher.get_by_label("课程名称").fill("高等数学 · 演示课堂")
             teacher.get_by_label("本次课堂 / 知识点").fill("连续与可导的关系")
@@ -65,12 +68,15 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student = mobile_context.new_page()
             student.on("pageerror", lambda e: errors.append(str(e)))
             student.goto(student_url)
-            student.get_by_role("link", name="学生注册", exact=True).click()
+            # Exercise the generic navbar route that used to lose the classroom next URL.
+            student.get_by_role("navigation").get_by_role("link", name="注册", exact=True).click()
+            student.get_by_role("link", name="我是学生，参与课堂", exact=False).click()
             student.screenshot(path=str(ARTIFACTS / "student-register-mobile.png"), full_page=True)
             student.get_by_label("用户名", exact=True).fill("browser_student")
             student.get_by_label("密码", exact=True).fill(password)
             student.get_by_label("密码确认", exact=True).fill(password)
             student.get_by_role("button", name="注册学生账号").click()
+            assert student.url == student_url
             student.get_by_role("radio", name="需要帮助").check()
             student.get_by_label("想让老师多讲一点什么").fill("为什么连续不一定可导？想再看一个反例。")
             student.get_by_role("button", name="把信号送给老师").click()
@@ -86,6 +92,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             second.get_by_label("用户名", exact=True).fill("browser_student")
             second.get_by_label("密码", exact=True).fill(password)
             second.get_by_role("button", name="登录", exact=False).click()
+            assert second.url == student_url
             second.get_by_role("radio", name="有点疑惑").check()
             second.get_by_role("button", name="更新我的反馈").click()
             teacher.wait_for_function("document.querySelector('#count-yellow').textContent === '1'", timeout=10000)

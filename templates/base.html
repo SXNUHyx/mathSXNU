@@ -17,7 +17,7 @@
       {% if user.is_authenticated %}
         {% if account_role == 'teacher' %}<a href="{% url 'teacher_home' %}">我的课堂</a>{% else %}<a href="{% url 'student_home' %}">我的学习</a>{% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
-      {% else %}<a href="{% url 'login' %}">登录</a><a href="{% url 'register_choice' %}" class="nav-teacher">注册</a>{% endif %}
+      {% else %}<a href="{% url 'login' %}?next={{ auth_next|urlencode }}">登录</a><a href="{% url 'register_choice' %}?next={{ auth_next|urlencode }}" class="nav-teacher">注册</a>{% endif %}
     </nav>
   </header>
   <main id="main">{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>

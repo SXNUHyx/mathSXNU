@@ -43,6 +43,7 @@ TEMPLATES = [{
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
         "feedback.roles.account_context",
+        "feedback.navigation.authentication_context",
     ]},
 }]
 WSGI_APPLICATION = "mathsxnu.wsgi.application"
