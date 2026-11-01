@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}我的学习 · 课堂信号{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">学生空间 / {{ user.username }}</p><h1 class="page-title">我的学习</h1><p class="muted">用课堂码加入，查看和更新自己的反馈。</p></div></div>
+<section class="panel student-join"><form method="post" action="{% url 'join' %}">{% csrf_token %}<label for="id_code">加入新课堂</label><div class="join-row">{{ form.code }}<button class="button primary" type="submit">进入课堂 →</button></div></form></section>
+<div class="list-heading"><h2>我加入的课堂 <span class="count-pill">{{ classrooms|length }}</span></h2></div><div class="lesson-grid">{% for item in classrooms %}<a class="panel lesson-card" href="{% url 'student' item.lesson.code %}"><div class="spread"><span class="eyebrow">{{ item.lesson.course }}</span><span class="badge {% if item.lesson.is_open %}open{% endif %}">{% if item.lesson.is_open %}接收中{% else %}已结束{% endif %}</span></div><h2>{{ item.lesson.title }}</h2><p class="muted">课堂码 {{ item.lesson.code }}</p><div class="lesson-card-bottom"><span>{% if item.response %}我的反馈：{{ item.response.get_status_display }}{% else %}尚未提交反馈{% endif %}</span><span>进入课堂 →</span></div></a>{% empty %}<div class="panel empty wide"><h2>还没有加入课堂</h2><p class="muted">输入老师分享的课堂码，或扫描二维码进入。</p></div>{% endfor %}</div>
+{% endblock %}

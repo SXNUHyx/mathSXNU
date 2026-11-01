@@ -1,5 +1,4 @@
 import csv
-import uuid
 from io import BytesIO
 from collections import Counter
 from django.contrib import messages
@@ -12,7 +11,8 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .forms import JoinForm, LessonForm, ResponseForm
-from .models import Lesson, Response, ResponseEvent
+from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership
+from .roles import account_role, teacher_required
 
 STATUSES = [
     {"value": "green", "label": "听懂了", "description": "思路清楚，可以继续", "symbol": "✓"},
@@ -46,14 +46,14 @@ def join(request):
     return render(request, "home.html", {"form": form}, status=400)
 
 
-@login_required
+@teacher_required
 def teacher_home(request):
     from django.db.models import Count
     lessons = Lesson.objects.filter(teacher=request.user).annotate(response_count=Count("responses"))
     return render(request, "teacher_home.html", {"lessons": lessons})
 
 
-@login_required
+@teacher_required
 def lesson_create(request):
     form = LessonForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
@@ -68,6 +68,19 @@ def lesson_create(request):
                 continue
         form.add_error(None, "暂时无法生成课堂码，请稍后重试。")
     return render(request, "lesson_form.html", {"form": form})
+
+
+@login_required
+@never_cache
+def student_home(request):
+    if account_role(request.user) == "teacher":
+        return redirect("teacher_home")
+    memberships = list(request.user.classroom_memberships.select_related("lesson"))
+    responses = {r.lesson_id: r for r in request.user.classroom_responses.all()}
+    return render(request, "student_home.html", {
+        "classrooms": [{"lesson": m.lesson, "response": responses.get(m.lesson_id)} for m in memberships],
+        "form": JoinForm(),
+    })
 
 
 def owned_lesson(request, code):
@@ -87,10 +100,12 @@ def summary(lesson):
         "expected_count": lesson.expected_count,
         "participation": round(total / lesson.expected_count * 100, 1) if lesson.expected_count else None,
         "updated": timezone.localtime().strftime("%H:%M:%S"),
+        "account_count": sum(r.user_id is not None for r in responses),
+        "legacy_count": sum(r.user_id is None for r in responses),
     }
 
 
-@login_required
+@teacher_required
 @never_cache
 def dashboard(request, code):
     lesson = owned_lesson(request, code)
@@ -100,13 +115,13 @@ def dashboard(request, code):
     })
 
 
-@login_required
+@teacher_required
 @never_cache
 def lesson_stats(request, code):
     return JsonResponse(summary(owned_lesson(request, code)))
 
 
-@login_required
+@teacher_required
 @never_cache
 def lesson_qr(request, code):
     import qrcode
@@ -119,7 +134,7 @@ def lesson_qr(request, code):
     return HttpResponse(buffer.getvalue(), content_type="image/svg+xml")
 
 
-@login_required
+@teacher_required
 @require_POST
 def toggle_lesson(request, code):
     action = request.POST.get("action")
@@ -133,14 +148,18 @@ def toggle_lesson(request, code):
     return redirect("dashboard", code=code)
 
 
+@login_required
 @never_cache
 def student(request, code):
     lesson = get_object_or_404(Lesson, code=code.upper())
-    # Browser-session pseudonym; no name/student ID and no public participant list.
-    if "participant" not in request.session:
-        request.session["participant"] = str(uuid.uuid4())
-    participant = request.session["participant"]
-    current = lesson.responses.filter(participant=participant).first()
+    if account_role(request.user) == "teacher":
+        if request.method == "POST":
+            return render(request, "role_required.html", {"student_only": True}, status=403)
+        return render(request, "student.html", {"lesson": lesson, "teacher_preview": True})
+    profile, _ = AccountProfile.objects.get_or_create(user=request.user)
+    ClassroomMembership.objects.get_or_create(lesson=lesson, student=request.user)
+    participant = profile.participant
+    current = lesson.responses.filter(user=request.user).first()
     error = None
     selected = current.status if current else ""
     note = current.note if current else ""
@@ -161,13 +180,13 @@ def student(request, code):
                 else:
                     data = form.cleaned_data
                     response, created = Response.objects.get_or_create(
-                        lesson=locked, participant=participant, defaults=data,
+                        lesson=locked, user=request.user, defaults={"participant": participant, **data},
                     )
                     if created or response.status != data["status"] or response.note != data["note"]:
                         if not created:
                             response.status, response.note = data["status"], data["note"]
                             response.save(update_fields=["status", "note", "updated_at"])
-                        ResponseEvent.objects.create(lesson=locked, participant=participant, **data)
+                        ResponseEvent.objects.create(lesson=locked, participant=participant, user=request.user, **data)
             if not error:
                 messages.success(request, "反馈已送达老师。理解程度变化时，您可以再次更新。")
                 return redirect("student", code=lesson.code)
@@ -183,7 +202,7 @@ def csv_safe(value):
     return "'" + value if value.lstrip().startswith(("=", "+", "-", "@")) else value
 
 
-@login_required
+@teacher_required
 @never_cache
 def export_csv(request, code):
     lesson = owned_lesson(request, code)
@@ -192,7 +211,7 @@ def export_csv(request, code):
     response["Content-Disposition"] = f'attachment; filename="classroom-{code}-{"history" if history else "latest"}.csv"'
     response.write("\ufeff")
     writer = csv.writer(response)
-    writer.writerow(["课程", "课堂", "课堂码", "统计类型", "课堂内随机编号", "理解程度", "补充说明", "时间（北京时间）"])
+    writer.writerow(["课程", "课堂", "课堂码", "统计类型", "课堂内随机编号", "理解程度", "补充说明", "时间（北京时间）", "反馈来源"])
     records = lesson.events.order_by("created_at", "pk") if history else lesson.responses.order_by("updated_at", "pk")
     # Export only lesson-scoped numbering, never the browser's cross-lesson UUID.
     participants = {}
@@ -200,7 +219,8 @@ def export_csv(request, code):
         number = participants.setdefault(record.participant, len(participants) + 1)
         when = record.created_at if history else record.updated_at
         writer.writerow([csv_safe(lesson.course), csv_safe(lesson.title), code,
-                         "变更历史" if history else "每个浏览器最新状态", number,
+                         "变更历史" if history else "当前状态", number,
                          record.get_status_display(), csv_safe(record.note),
-                         timezone.localtime(when).strftime("%Y-%m-%d %H:%M:%S")])
+                         timezone.localtime(when).strftime("%Y-%m-%d %H:%M:%S"),
+                         "学生账号反馈" if record.user_id is not None else "历史不记名反馈"])
     return response

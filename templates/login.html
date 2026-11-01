@@ -1,15 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}教师登录 · 课堂信号{% endblock %}
+{% block title %}账号登录 · 课堂信号{% endblock %}
 {% block content %}
 <section class="panel narrow">
-  <p class="eyebrow">教师工作台</p><h1 class="page-title">欢迎回到课堂</h1><p class="muted">登录后创建课堂，查看学生的理解信号。</p>
+  <p class="eyebrow">教师 / 学生 · 统一登录</p><h1 class="page-title">欢迎回到课堂</h1><p class="muted">登录后会自动进入与您身份对应的页面。</p>
   <form method="post">{% csrf_token %}
     {% if login_throttled %}<p class="field-error" role="alert">此账号尝试登录过于频繁，请在10分钟后重试。</p>{% elif form.errors %}<p class="field-error" role="alert">用户名或密码不正确，请重新输入。</p>{% endif %}
-    <label for="id_username">教师账号</label><input id="id_username" name="username" autocomplete="username" required maxlength="150" value="{{ form.username.value|default:'' }}">
+    <label for="id_username">用户名</label><input id="id_username" name="username" autocomplete="username" autocapitalize="none" required maxlength="150" value="{{ form.username.value|default:'' }}">
     <label for="id_password">密码</label><input id="id_password" name="password" type="password" autocomplete="current-password" required>
     <input type="hidden" name="next" value="{{ next }}">
-    <button class="button primary full">登录教师端 →</button>
+    <button class="button primary full">登录 →</button>
   </form>
-  <p class="muted small">账号由平台维护人员开通，不开放公共注册。首次使用请按项目说明创建教师账号。</p>
+  <div class="account-links"><span>还没有账号？</span><a href="{% url 'register_teacher' %}?next={{ next|urlencode }}">教师注册</a><a href="{% url 'register_student' %}?next={{ next|urlencode }}">学生注册</a></div>
+  <p class="muted small">原有教师账号仍可使用。忘记密码请联系平台维护人员重设。</p>
 </section>
 {% endblock %}

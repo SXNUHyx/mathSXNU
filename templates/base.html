@@ -15,9 +15,9 @@
     <nav aria-label="主导航">
       <a href="{% url 'home' %}">学生入口</a>
       {% if user.is_authenticated %}
-        <a href="{% url 'teacher_home' %}">我的课堂</a>
+        {% if account_role == 'teacher' %}<a href="{% url 'teacher_home' %}">我的课堂</a>{% else %}<a href="{% url 'student_home' %}">我的学习</a>{% endif %}
         <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
-      {% else %}<a href="{% url 'login' %}" class="nav-teacher">教师登录 <span aria-hidden="true">↗</span></a>{% endif %}
+      {% else %}<a href="{% url 'login' %}">登录</a><a href="{% url 'register_choice' %}" class="nav-teacher">注册</a>{% endif %}
     </nav>
   </header>
   <main id="main">{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>

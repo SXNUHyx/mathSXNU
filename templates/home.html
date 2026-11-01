@@ -10,12 +10,12 @@
       <div><span class="signal-mini yellow">?</span><b>有点疑惑</b><small>想再听一遍</small></div>
       <div><span class="signal-mini red">!</span><b>需要帮助</b><small>请慢一点</small></div>
     </div>
-    <p class="muted home-footnote">不填写姓名或学号 · 选择可随时更新 · 仅任课教师查看</p>
+    <p class="muted home-footnote">账号登录后反馈 · 选择可随时更新 · 仅任课教师查看</p>
   </section>
   <section class="panel join-panel" aria-labelledby="join-title">
     <span class="section-number">01 / 加入课堂</span>
     <h2 id="join-title">今天，学得怎么样？</h2>
-    <p class="muted">输入老师分享的6位课堂码，开始反馈。</p>
+    <p class="muted">输入老师分享的6位课堂码，登录学生账号后反馈。</p>
     <form method="post" action="{% url 'join' %}">
       {% csrf_token %}
       <label for="id_code">课堂码</label>
@@ -24,6 +24,7 @@
       <button class="button primary full" type="submit">进入课堂 <span aria-hidden="true">→</span></button>
     </form>
     <div class="join-help"><span aria-hidden="true">ⓘ</span><p>还没有课堂码？请向老师获取。<br>也可以直接扫描课堂二维码进入。</p></div>
+    <div class="account-links"><span>第一次使用？</span><a href="{% url 'register_student' %}">学生注册</a><a href="{% url 'register_teacher' %}">教师注册</a></div>
     <div class="teacher-entry">我是老师 <a href="{% url 'teacher_home' %}">创建课堂，收集反馈 →</a></div>
   </section>
 </div>

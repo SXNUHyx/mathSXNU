@@ -6,7 +6,8 @@
   <div class="spread"><span class="section-number">此刻的理解程度</span><span class="muted small">没有对错，真实就好</span></div>
   <h2>这个知识点，你跟上了吗？</h2><p class="muted">选择最贴近你的状态，帮助老师调整课堂节奏。</p>
   {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
-  {% if lesson.is_open %}
+  {% if teacher_preview %}<div class="notice">这是学生页面预览。教师账号不能提交学生反馈；请使用学生账号测试提交。</div><a class="button secondary" href="{% url 'teacher_home' %}">返回我的课堂</a>
+  {% elif lesson.is_open %}
   <form method="post">{% csrf_token %}
     <fieldset class="signals"><legend class="sr-only">选择理解程度</legend>
     {% for status in statuses %}<label class="signal-choice {{ status.value }}"><input type="radio" name="status" value="{{ status.value }}" {% if selected == status.value %}checked{% endif %} required><span class="signal-body"><span class="signal-circle" aria-hidden="true">{{ status.symbol }}</span><strong>{{ status.label }}</strong><span class="signal-description">{{ status.description }}</span><span class="selected-label">已选择 ✓</span></span></label>{% endfor %}
@@ -18,5 +19,5 @@
   </form>
   {% else %}<div class="closed-state"><span class="empty-symbol">✓</span><h3>感谢你的课堂反馈</h3><p>老师已结束本次收集，已有记录会保留。</p>{% if current %}<p>你的最后反馈：<b>{{ current.get_status_display }}</b></p>{% endif %}<a class="button secondary" href="{% url 'home' %}">加入其他课堂</a></div>{% endif %}
 </section>
-<aside class="privacy-note">不要求姓名或学号，老师能看到你的选择和补充说明。此浏览器的最新选择计入汇总，更新历史会保留。更换浏览器可能重复计数，请保持使用同一浏览器。</aside>
+<aside class="privacy-note">反馈与登录账号关联，同一账号在本课堂只计一份当前状态，更新历史会保留。课堂看板和CSV不展示用户名，任课教师可查看反馈文字；平台管理员可通过数据库关联账号。注册信息未经实名核验，不用于严格考勤。</aside>
 {% endblock %}

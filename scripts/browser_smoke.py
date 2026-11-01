@@ -25,11 +25,6 @@ password = secrets.token_urlsafe(24)
 with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
     env = {**os.environ, "DJANGO_DB_PATH": str(Path(tmp) / "test.sqlite3"), "DJANGO_DEBUG": "1"}
     subprocess.run([PYTHON, "manage.py", "migrate", "--noinput"], cwd=ROOT, env=env, check=True, stdout=subprocess.DEVNULL)
-    setup = (
-        "from django.contrib.auth import get_user_model\n"
-        f"get_user_model().objects.create_user('browser_teacher', password={password!r})\n"
-    )
-    subprocess.run([PYTHON, "manage.py", "shell"], input=setup, text=True, cwd=ROOT, env=env, check=True, stdout=subprocess.DEVNULL)
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -53,10 +48,12 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.on("pageerror", lambda e: errors.append(str(e)))
             teacher.goto(base)
             teacher.screenshot(path=str(ARTIFACTS / "home-desktop.png"), full_page=True)
-            teacher.get_by_role("link", name="教师登录").click()
-            teacher.get_by_label("教师账号").fill("browser_teacher")
+            teacher.get_by_role("link", name="教师注册", exact=True).click()
+            teacher.screenshot(path=str(ARTIFACTS / "teacher-register-desktop.png"), full_page=True)
+            teacher.get_by_label("用户名", exact=True).fill("browser_teacher")
             teacher.get_by_label("密码", exact=True).fill(password)
-            teacher.get_by_role("button", name="登录教师端").click()
+            teacher.get_by_label("密码确认", exact=True).fill(password)
+            teacher.get_by_role("button", name="注册教师账号").click()
             teacher.get_by_role("link", name="创建我的第一个课堂").click()
             teacher.get_by_label("课程名称").fill("高等数学 · 演示课堂")
             teacher.get_by_label("本次课堂 / 知识点").fill("连续与可导的关系")
@@ -68,6 +65,12 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student = mobile_context.new_page()
             student.on("pageerror", lambda e: errors.append(str(e)))
             student.goto(student_url)
+            student.get_by_role("link", name="学生注册", exact=True).click()
+            student.screenshot(path=str(ARTIFACTS / "student-register-mobile.png"), full_page=True)
+            student.get_by_label("用户名", exact=True).fill("browser_student")
+            student.get_by_label("密码", exact=True).fill(password)
+            student.get_by_label("密码确认", exact=True).fill(password)
+            student.get_by_role("button", name="注册学生账号").click()
             student.get_by_role("radio", name="需要帮助").check()
             student.get_by_label("想让老师多讲一点什么").fill("为什么连续不一定可导？想再看一个反例。")
             student.get_by_role("button", name="把信号送给老师").click()
@@ -76,6 +79,22 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.wait_for_function("document.querySelector('#count-red').textContent === '1'", timeout=10000)
             teacher.wait_for_timeout(500)  # Let the chart's short CSS transition settle for the screenshot.
             assert teacher.locator("#total").inner_text() == "1"
+            # A new browser logged into the same student account sees and updates one response.
+            second_context = browser.new_context(viewport={"width": 1366, "height": 900})
+            second = second_context.new_page()
+            second.goto(student_url)
+            second.get_by_label("用户名", exact=True).fill("browser_student")
+            second.get_by_label("密码", exact=True).fill(password)
+            second.get_by_role("button", name="登录", exact=False).click()
+            second.get_by_role("radio", name="有点疑惑").check()
+            second.get_by_role("button", name="更新我的反馈").click()
+            teacher.wait_for_function("document.querySelector('#count-yellow').textContent === '1'", timeout=10000)
+            assert teacher.locator("#total").inner_text() == "1"
+            second.goto(base + "/teacher/")
+            assert second.get_by_role("heading", name="这里需要教师账号").count() == 1
+            student.goto(base + "/student/")
+            student.get_by_role("heading", name="我的学习", exact=True).wait_for()
+            student.goto(student_url)
             assert "为什么连续不一定可导" in teacher.locator("#notes").inner_text()
             teacher.screenshot(path=str(ARTIFACTS / "teacher-desktop.png"), full_page=True)
             student.get_by_role("radio", name="听懂了").check()
@@ -98,7 +117,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             assert student.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             assert not errors, errors
             browser.close()
-        print(json.dumps({"result": "passed", "checks": ["教师登录与创建", "移动端学生提交", "5秒自动更新", "更新不重复计数", "CSV下载", "结束课堂", "移动端无横向溢出", "无JavaScript异常"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "checks": ["教师前端注册与创建课堂", "学生手机注册后返回课堂", "学生跨浏览器登录只计一份", "学生不能访问教师页面", "我的学习", "5秒自动更新", "CSV下载", "结束课堂", "移动端无横向溢出", "无JavaScript异常"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)

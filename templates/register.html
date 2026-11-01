@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}{% if role == 'teacher' %}教师{% else %}学生{% endif %}注册 · 课堂信号{% endblock %}
+{% block content %}
+<section class="panel narrow"><p class="eyebrow">{% if role == 'teacher' %}教师账号 · 创建与管理课堂{% else %}学生账号 · 参与课堂与查看反馈{% endif %}</p><h1 class="page-title">{% if role == 'teacher' %}教师{% else %}学生{% endif %}注册</h1><p class="muted">设置用户名和密码，注册成功后会自动登录。</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="next" value="{{ next }}">{{ form.non_field_errors }}{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<div class="field-help">{{ field.help_text|safe }}</div>{% endif %}{% for error in field.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}{% endfor %}<button class="button primary full" type="submit">注册{% if role == 'teacher' %}教师{% else %}学生{% endif %}账号 →</button></form>
+<p class="muted small account-help">不要求姓名、学号或手机号。反馈与学生账号关联，密码不会明文保存。课堂看板不展示用户名，不代表完全匿名。请妥善记住用户名和密码。</p><div class="account-links"><a href="{% url 'login' %}?next={{ next|urlencode }}">已有账号，去登录</a><a href="{% url 'register_choice' %}?next={{ next|urlencode }}">更换注册身份</a></div></section>
+{% endblock %}

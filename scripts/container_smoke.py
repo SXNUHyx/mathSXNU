@@ -4,6 +4,7 @@ Uses the already-built mathsxnu-classroom:local image. Does not issue real TLS
 certificates or publish a classroom website. Requires Docker Compose v2.
 """
 import json
+import argparse
 import os
 from pathlib import Path
 import secrets
@@ -25,6 +26,9 @@ def free_port():
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--upgrade-from", help="Optional old image for an isolated, real upgrade rehearsal")
+    args = parser.parse_args()
     project = "classroom-smoke-" + uuid.uuid4().hex[:8]
     http_port, https_port = free_port(), free_port()
     env = {**os.environ,
@@ -37,10 +41,11 @@ def main():
         env.pop(key, None)
     with tempfile.TemporaryDirectory(prefix="classroom-compose-") as tmp:
         override = Path(tmp) / "override.json"
-        override.write_text(json.dumps({"services": {
-            "web": {"environment": {"DJANGO_SSL_REDIRECT": "0"}},
+        overrides = {"services": {
+            "web": {"image": args.upgrade_from or "mathsxnu-classroom:local", "environment": {"DJANGO_SSL_REDIRECT": "0"}},
             "gateway": {"environment": {"CLASSROOM_DOMAIN": "http://classroom.test"}},
-        }}))
+        }}
+        override.write_text(json.dumps(overrides))
         base = ["docker", "--host=unix:///var/run/docker.sock", "compose", "-p", project,
                 "-f", str(ROOT / "compose.yaml"), "-f", str(override)]
         def run(*args, **kwargs):
@@ -66,6 +71,14 @@ def main():
                 "Response.objects.create(lesson=l,participant=uuid.uuid4(),status='red')\n"
             )
             run("exec", "-T", "web", "python", "manage.py", "shell", input=seed, text=True, stdout=subprocess.DEVNULL)
+            if args.upgrade_from:
+                run("stop", "gateway")
+                run("exec", "-T", "web", "python", "manage.py", "backup_classroom", "--output", "/data/pre-upgrade.sqlite3")
+                overrides["services"]["web"]["image"] = "mathsxnu-classroom:local"
+                override.write_text(json.dumps(overrides))
+                run("up", "-d", "--no-build", "--wait", "--wait-timeout", "120")
+                run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import AccountProfile,Response\nassert AccountProfile.objects.get(user__username='container_test').role=='teacher'\nassert Response.objects.get().user_id is None\n", text=True, stdout=subprocess.DEVNULL)
+                print("旧版到注册版升级通过：原普通教师自动保留教师身份，历史反馈保留且不误绑账号。")
             run("restart", "web")
             for _ in range(50):
                 try:

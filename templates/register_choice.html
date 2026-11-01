@@ -1,0 +1,5 @@
+{% extends 'base.html' %}
+{% block title %}注册账号 · 课堂信号{% endblock %}
+{% block content %}
+<section class="panel narrow"><p class="eyebrow">欢迎加入课堂信号</p><h1 class="page-title">请选择您的身份</h1><p class="muted">教师与学生使用独立账号，登录后进入各自的页面。</p><a class="button primary full" href="{% url 'register_teacher' %}?next={{ next|urlencode }}">我是老师，创建课堂 →</a><a class="button secondary full" href="{% url 'register_student' %}?next={{ next|urlencode }}">我是学生，参与课堂 →</a><p class="muted small account-help">已有账号？<a class="text-link" href="{% url 'login' %}?next={{ next|urlencode }}">去登录</a></p></section>
+{% endblock %}

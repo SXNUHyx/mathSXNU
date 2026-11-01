@@ -1,22 +1,28 @@
 import csv
 import io
+import uuid
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
-from .models import Lesson, Response, ResponseEvent
+from .models import Lesson, Response, ResponseEvent, AccountProfile
 
 
 class ClassroomTests(TestCase):
     def setUp(self):
         self.teacher = get_user_model().objects.create_user("teacher", password="test-password-4278")
         self.other = get_user_model().objects.create_user("other", password="test-password-4278")
+        AccountProfile.objects.create(user=self.teacher, role="teacher")
+        AccountProfile.objects.create(user=self.other, role="teacher")
         self.lesson = Lesson.objects.create(teacher=self.teacher, title="连续与可导", expected_count=20)
         self.student_url = reverse("student", args=[self.lesson.code])
         self.teacher_client = Client()
         self.teacher_client.force_login(self.teacher)
 
     def vote(self, client, status="green", note=""):
-        client.get(self.student_url)  # Establish the browser session before submission.
+        if not client.session.get("_auth_user_id"):
+            user = get_user_model().objects.create_user("student_" + uuid.uuid4().hex[:12])
+            client.force_login(user)
+        client.get(self.student_url)
         return client.post(self.student_url, {"status": status, "note": note})
 
     def stats(self):
@@ -83,6 +89,7 @@ class ClassroomTests(TestCase):
 
     def test_student_does_not_receive_other_feedback(self):
         self.vote(Client(), "red", "只有教师才能看见这段话")
+        self.vote(self.client)
         result = self.client.get(self.student_url)
         self.assertNotContains(result, "只有教师才能看见这段话")
         self.assertNotContains(result, 'id="initial-stats"')
@@ -110,6 +117,7 @@ class ClassroomTests(TestCase):
 
     def test_feedback_and_teacher_changes_require_csrf(self):
         csrf_client = Client(enforce_csrf_checks=True)
+        csrf_client.force_login(get_user_model().objects.create_user("csrf_student"))
         csrf_client.get(self.student_url)
         self.assertEqual(csrf_client.post(self.student_url, {"status": "green"}).status_code, 403)
         token = csrf_client.cookies["csrftoken"].value
@@ -129,8 +137,9 @@ class ClassroomTests(TestCase):
 
     def test_join_normalizes_code_and_unknown_code_is_clear(self):
         result = self.client.post(reverse("join"), {"code": " " + self.lesson.code.lower() + " "})
-        self.assertRedirects(result, self.student_url)
+        self.assertRedirects(result, self.student_url, fetch_redirect_response=False)
         self.assertEqual(self.client.post(reverse("join"), {"code": "AAAAAA"}).status_code, 400)
+        self.client.force_login(get_user_model().objects.create_user("unknown_class_student"))
         self.assertEqual(self.client.get("/s/ZZZZZZ/").status_code, 404)
 
     def test_qr_is_generated_locally(self):

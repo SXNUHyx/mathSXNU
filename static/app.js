@@ -44,8 +44,9 @@
       : '目前收到的反馈均为“听懂了”。也可以用一个问题再确认理解。';
     document.querySelector('#updated').textContent = data.updated;
     document.querySelector('#participation').textContent = data.expected_count
-      ? `预计 ${data.expected_count} 人 · 浏览器反馈数 / 预计人数 ${data.participation}%（供参考）`
-      : '未设置预计人数 · 按浏览器最新状态统计';
+      ? `预计 ${data.expected_count} 人 · 当前反馈 / 预计人数 ${data.participation}%（供参考）`
+      : '未设置预计人数 · 按账号最新状态统计';
+    document.querySelector('#data-scope').textContent = `当前含 ${data.account_count} 份账号反馈、${data.legacy_count} 份历史不记名反馈。账号反馈按每个账号一份当前状态统计；历史记录无法自动归属新账号，混合数据不代表严格人数。看板和CSV不展示用户名。`;
     const live = document.querySelector('#live-status');
     live.textContent = data.is_open ? '接收中 · 每5秒更新' : '已结束';
     live.classList.toggle('open', data.is_open);
