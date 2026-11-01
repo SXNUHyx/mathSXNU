@@ -1,0 +1,26 @@
+{% load static %}
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#185b4a">
+  <title>{% block title %}课堂信号 · mathSXNU{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'app.css' %}">
+  <script src="{% static 'app.js' %}" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="{% url 'home' %}" aria-label="课堂信号首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>课堂信号<small>mathSXNU</small></span></a>
+    <nav aria-label="主导航">
+      <a href="{% url 'home' %}">学生入口</a>
+      {% if user.is_authenticated %}
+        <a href="{% url 'teacher_home' %}">我的课堂</a>
+        <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
+      {% else %}<a href="{% url 'login' %}" class="nav-teacher">教师登录 <span aria-hidden="true">↗</span></a>{% endif %}
+    </nav>
+  </header>
+  <main id="main">{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
+  <footer class="site-footer"><span>mathSXNU · 让每一次困惑，都有回应</span><span>课堂即时反馈 · 不用于考勤或成绩评定</span></footer>
+</body>
+</html>

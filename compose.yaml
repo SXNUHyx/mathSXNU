@@ -1,0 +1,54 @@
+name: mathsxnu-classroom
+services:
+  web:
+    image: mathsxnu-classroom:local
+    build: .
+    restart: unless-stopped
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?请先运行 python3 scripts/configure-deployment.py}
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,${CLASSROOM_DOMAIN:?请先设置课堂域名}
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${CLASSROOM_DOMAIN}
+      DJANGO_DB_PATH: /data/db.sqlite3
+      DJANGO_TRUST_PROXY: "1"
+    volumes:
+      - classroom_data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8000/health/', timeout=4).read() == b'ok'"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  gateway:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    environment:
+      CLASSROOM_DOMAIN: ${CLASSROOM_DOMAIN}
+      NO_PROXY: web,localhost,127.0.0.1
+      no_proxy: web,localhost,127.0.0.1
+    ports:
+      - "${CLASSROOM_HTTP_BIND:-80}:80"
+      - "${CLASSROOM_HTTPS_BIND:-443}:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+volumes:
+  classroom_data:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block title %}{{ lesson.title }} · 课堂反馈{% endblock %}
+{% block content %}
+<section class="student-heading"><p class="eyebrow">{{ lesson.course }} <span class="divider">/</span> 课堂 {{ lesson.code }}</p><h1>{{ lesson.title }}</h1><span class="badge {% if lesson.is_open %}open{% endif %}">{% if lesson.is_open %}正在接收反馈{% else %}课堂已结束{% endif %}</span></section>
+<section class="panel student-panel">
+  <div class="spread"><span class="section-number">此刻的理解程度</span><span class="muted small">没有对错，真实就好</span></div>
+  <h2>这个知识点，你跟上了吗？</h2><p class="muted">选择最贴近你的状态，帮助老师调整课堂节奏。</p>
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+  {% if lesson.is_open %}
+  <form method="post">{% csrf_token %}
+    <fieldset class="signals"><legend class="sr-only">选择理解程度</legend>
+    {% for status in statuses %}<label class="signal-choice {{ status.value }}"><input type="radio" name="status" value="{{ status.value }}" {% if selected == status.value %}checked{% endif %} required><span class="signal-body"><span class="signal-circle" aria-hidden="true">{{ status.symbol }}</span><strong>{{ status.label }}</strong><span class="signal-description">{{ status.description }}</span><span class="selected-label">已选择 ✓</span></span></label>{% endfor %}
+    </fieldset>
+    <label for="note">想让老师多讲一点什么？ <span class="muted normal">选填</span></label>
+    <textarea id="note" name="note" maxlength="300" rows="3" placeholder="例如：连续为什么不一定可导？能再举一个反例吗？">{{ note }}</textarea>
+    <div class="spread note-hint"><span class="muted small">请勿填写姓名、学号或他人隐私。</span><span class="muted small" id="char-count">最多300字</span></div>
+    <button class="button primary full" type="submit">{% if current %}更新我的反馈{% else %}把信号送给老师{% endif %} <span aria-hidden="true">→</span></button>
+  </form>
+  {% else %}<div class="closed-state"><span class="empty-symbol">✓</span><h3>感谢你的课堂反馈</h3><p>老师已结束本次收集，已有记录会保留。</p>{% if current %}<p>你的最后反馈：<b>{{ current.get_status_display }}</b></p>{% endif %}<a class="button secondary" href="{% url 'home' %}">加入其他课堂</a></div>{% endif %}
+</section>
+<aside class="privacy-note">不要求姓名或学号，老师能看到你的选择和补充说明。此浏览器的最新选择计入汇总，更新历史会保留。更换浏览器可能重复计数，请保持使用同一浏览器。</aside>
+{% endblock %}

@@ -1,0 +1,9 @@
+{$CLASSROOM_DOMAIN} {
+    encode zstd gzip
+    header {
+        Referrer-Policy "same-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        -Server
+    }
+    reverse_proxy web:8000
+}

@@ -1,0 +1,7 @@
+{% extends 'base.html' %}
+{% block title %}创建课堂 · 课堂信号{% endblock %}
+{% block content %}
+<section class="panel narrow"><a class="back-link" href="{% url 'teacher_home' %}">← 返回我的课堂</a><p class="eyebrow">一个课堂 · 一个反馈空间</p><h1 class="page-title">创建新课堂</h1><p class="muted">可以按每次课或每个知识点创建，历史记录会分别保留。</p>
+<form method="post">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% for error in field.errors %}<p class="field-error">{{ error }}</p>{% endfor %}{% endfor %}<button class="button primary full">创建并获取课堂码 →</button></form>
+<p class="muted small">预计人数仅用于参考。浏览器反馈数不能严格代表学生人数。</p></section>
+{% endblock %}

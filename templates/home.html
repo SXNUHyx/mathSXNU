@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="home-layout">
+  <section class="home-intro">
+    <p class="eyebrow"><span class="tiny-dot"></span> 高等数学 · 课堂即时反馈</p>
+    <h1>跟得上吗？<br>让老师<span class="accent">看见你的理解。</span></h1>
+    <p class="intro-copy">不用举手，也不必担心打断课堂。<br>用一个简单的信号，告诉老师此刻的学习状态。</p>
+    <div class="signal-preview" aria-label="三种反馈信号">
+      <div><span class="signal-mini green">✓</span><b>听懂了</b><small>可以继续</small></div>
+      <div><span class="signal-mini yellow">?</span><b>有点疑惑</b><small>想再听一遍</small></div>
+      <div><span class="signal-mini red">!</span><b>需要帮助</b><small>请慢一点</small></div>
+    </div>
+    <p class="muted home-footnote">不填写姓名或学号 · 选择可随时更新 · 仅任课教师查看</p>
+  </section>
+  <section class="panel join-panel" aria-labelledby="join-title">
+    <span class="section-number">01 / 加入课堂</span>
+    <h2 id="join-title">今天，学得怎么样？</h2>
+    <p class="muted">输入老师分享的6位课堂码，开始反馈。</p>
+    <form method="post" action="{% url 'join' %}">
+      {% csrf_token %}
+      <label for="id_code">课堂码</label>
+      <div class="code-input">{{ form.code }}</div>
+      {% for error in form.code.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}
+      <button class="button primary full" type="submit">进入课堂 <span aria-hidden="true">→</span></button>
+    </form>
+    <div class="join-help"><span aria-hidden="true">ⓘ</span><p>还没有课堂码？请向老师获取。<br>也可以直接扫描课堂二维码进入。</p></div>
+    <div class="teacher-entry">我是老师 <a href="{% url 'teacher_home' %}">创建课堂，收集反馈 →</a></div>
+  </section>
+</div>
+<section class="how-it-works" aria-label="使用步骤"><div><span>01</span><p><b>加入课堂</b><small>输入课堂码或扫描二维码</small></p></div><div><span>02</span><p><b>发出信号</b><small>选择最贴近此刻的理解程度</small></p></div><div><span>03</span><p><b>获得回应</b><small>帮助老师及时调整讲解节奏</small></p></div></section>
+{% endblock %}
