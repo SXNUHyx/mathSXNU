@@ -82,7 +82,7 @@ class ClassroomTests(TestCase):
 
     def test_invalid_feedback_never_writes(self):
         self.assertEqual(self.vote(self.client, "blue").status_code, 400)
-        self.assertEqual(self.vote(self.client, "red", "长" * 301).status_code, 400)
+        self.assertEqual(self.vote(self.client, "red", "长" * 3001).status_code, 400)
         self.assertEqual(self.vote(self.client, "").status_code, 400)
         self.assertFalse(Response.objects.exists())
         self.assertFalse(ResponseEvent.objects.exists())

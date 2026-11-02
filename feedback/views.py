@@ -3,6 +3,7 @@ from io import BytesIO
 from collections import Counter
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,9 +12,10 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .forms import JoinForm, LessonForm, ResponseForm
-from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership, TeacherReply
+from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership, TeacherReply, QuestionAttachment
 from .roles import account_role, teacher_required
 from .learning import content_context, feedback_payload, reply_payload
+from .insights import keyword_insights
 
 STATUSES = [
     {"value": "green", "label": "听懂了", "description": "思路清楚，可以继续", "symbol": "✓"},
@@ -92,7 +94,7 @@ def summary(lesson, page_number=1):
     # Materialize one snapshot, so the chart, notes and denominator agree.
     from django.db.models import OuterRef, Subquery
     event = lesson.events.filter(participant=OuterRef("participant")).order_by("-pk").values("pk")[:1]
-    responses = list(lesson.responses.select_related("user", "lesson").annotate(latest_event_id=Subquery(event)).order_by("-updated_at", "-pk"))
+    responses = list(lesson.responses.select_related("user", "lesson", "block").annotate(latest_event_id=Subquery(event)).order_by("-updated_at", "-pk"))
     counts = Counter(r.status for r in responses)
     total = len(responses)
     rows = [{**s, "count": counts[s["value"]], "percent": round(counts[s["value"]] / total * 100, 1) if total else 0} for s in STATUSES]
@@ -103,7 +105,12 @@ def summary(lesson, page_number=1):
         page = 1
     selected = responses[(page - 1) * 50:page * 50]
     from django.db.models import prefetch_related_objects
-    prefetch_related_objects(selected, "replies")
+    prefetch_related_objects(selected, "replies__question_event__attachments")
+    files = {}
+    for attachment in QuestionAttachment.objects.filter(event_id__in=[r.latest_event_id for r in selected]):
+        files.setdefault(attachment.event_id, []).append(attachment)
+    for response in selected:
+        response.question_files = files.get(response.latest_event_id, [])
     notes = [feedback_payload(r) for r in selected]
     return {
         "total": total, "rows": rows, "notes": notes, "is_open": lesson.is_open,
@@ -113,6 +120,7 @@ def summary(lesson, page_number=1):
         "account_count": sum(r.user_id is not None for r in responses),
         "legacy_count": sum(r.user_id is None for r in responses),
         "page": page, "pages": pages,
+        "insights": keyword_insights(responses),
     }
 
 
@@ -125,6 +133,7 @@ def dashboard(request, code):
         "lesson": lesson, "summary": data,
         "student_url": request.build_absolute_uri(reverse("student", args=[code])),
         "manage_content": True,
+        "history_insights": keyword_insights(lesson.events.select_related('block')),
         **content_context(lesson),
     })
 
@@ -181,8 +190,9 @@ def student(request, code):
     note = current.note if current else ""
     real_name = current.real_name if current and current.real_name else profile.real_name
     student_number = current.student_number if current and current.student_number else profile.student_number
+    form = ResponseForm(lesson=lesson, initial={'block': current.block_id if current else None})
     if request.method == "POST":
-        form = ResponseForm(request.POST)
+        form = ResponseForm(request.POST, request.FILES, lesson=lesson)
         selected = request.POST.get("status", "")
         note = request.POST.get("note", "")
         real_name = request.POST.get("real_name", "")
@@ -190,7 +200,7 @@ def student(request, code):
         if not lesson.is_open:
             error = "本次课堂已结束，暂时不能修改反馈。"
         elif not form.is_valid():
-            error = "请填写姓名、学号并选择理解程度；学号使用数字、字母、下划线或连字符，补充说明最多300字。"
+            error = "请检查姓名、学号、学习状态和附件；问题文字最多3000字。"
         else:
             with transaction.atomic():
                 # Serialize closure and writes where the database supports row locks.
@@ -198,16 +208,30 @@ def student(request, code):
                 if not locked.is_open or locked.deleted_at:
                     error = "本次课堂已结束，暂时不能修改反馈。"
                 else:
-                    data = form.cleaned_data
+                    data = form.cleaned_data.copy()
+                    uploads = data.pop('attachments')
                     response, created = Response.objects.get_or_create(
                         lesson=locked, user=request.user, defaults={"participant": participant, **data},
                     )
-                    if created or any(getattr(response, key) != value for key, value in data.items()):
+                    if created or uploads or any(getattr(response, key) != value for key, value in data.items()):
                         if not created:
                             for key, value in data.items():
                                 setattr(response, key, value)
                             response.save(update_fields=[*data, "updated_at"])
-                        ResponseEvent.objects.create(lesson=locked, participant=participant, user=request.user, **data)
+                        event = ResponseEvent.objects.create(lesson=locked, participant=participant, user=request.user,
+                            block_title=str(data['block']) if data['block'] else '', **data)
+                        saved = []
+                        try:
+                            for uploaded in uploads:
+                                attachment = QuestionAttachment(event=event, file=uploaded, original_name=uploaded.name,
+                                    size=uploaded.size, content_type=uploaded.inspected_type, is_image=uploaded.inspected_image)
+                                saved.append(attachment)
+                                attachment.save()
+                        except Exception:
+                            for attachment in saved:
+                                if attachment.file._committed:
+                                    attachment.file.delete(save=False)
+                            raise
                     AccountProfile.objects.filter(pk=profile.pk).update(real_name=data["real_name"], student_number=data["student_number"])
             if not error:
                 messages.success(request, "反馈已送达老师。理解程度变化时，您可以再次更新。")
@@ -216,7 +240,10 @@ def student(request, code):
         "lesson": lesson, "statuses": STATUSES, "current": current,
         "selected": selected, "note": note, "error": error,
         "real_name": real_name, "student_number": student_number,
-        "replies": [reply_payload(r) for r in TeacherReply.objects.filter(response__lesson=lesson, response__user=request.user)],
+        "question_form": form,
+        "question_history": Paginator(
+            lesson.events.filter(user=request.user).prefetch_related('attachments').order_by('-pk'), 20).get_page(request.GET.get('questions_page')),
+        "replies": [reply_payload(r) for r in TeacherReply.objects.filter(response__lesson=lesson, response__user=request.user).select_related('question_event').prefetch_related('question_event__attachments')],
         **content_context(lesson),
     }, status=400 if error else 200)
 

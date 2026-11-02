@@ -34,7 +34,8 @@ class Response(models.Model):
     participant = models.UUIDField()
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="classroom_responses")
     status = models.CharField(max_length=6, choices=Status.choices)
-    note = models.CharField(max_length=300, blank=True)
+    note = models.CharField(max_length=3000, blank=True)
+    block = models.ForeignKey('KnowledgeBlock', null=True, blank=True, on_delete=models.SET_NULL, related_name='feedbacks')
     real_name = models.CharField(max_length=50, blank=True)
     student_number = models.CharField(max_length=40, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -51,7 +52,9 @@ class ResponseEvent(models.Model):
     participant = models.UUIDField()
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     status = models.CharField(max_length=6, choices=Response.Status.choices)
-    note = models.CharField(max_length=300, blank=True)
+    note = models.CharField(max_length=3000, blank=True)
+    block = models.ForeignKey('KnowledgeBlock', null=True, blank=True, on_delete=models.SET_NULL)
+    block_title = models.CharField(max_length=120, blank=True)
     real_name = models.CharField(max_length=50, blank=True)
     student_number = models.CharField(max_length=40, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -131,10 +134,48 @@ class TeacherReply(models.Model):
     response = models.ForeignKey(Response, on_delete=models.CASCADE, related_name="replies")
     teacher = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     question_event = models.ForeignKey(ResponseEvent, on_delete=models.SET_NULL, null=True, blank=True)
-    question_text = models.CharField(max_length=300, blank=True)
+    question_text = models.CharField(max_length=3000, blank=True)
     message = models.TextField(max_length=5000)
     created_at = models.DateTimeField(auto_now_add=True)
     student_read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ["created_at", "pk"]
+
+
+def question_file_path(instance, filename):
+    return f"questions/{instance.event_id}/{uuid.uuid4().hex}{Path(filename).suffix.lower()}"
+
+
+class QuestionAttachment(models.Model):
+    event = models.ForeignKey(ResponseEvent, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to=question_file_path)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=100)
+    is_image = models.BooleanField(default=False)
+    size = models.PositiveIntegerField()
+
+
+class AIConversation(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='ai_conversations')
+    lesson = models.ForeignKey(Lesson, null=True, blank=True, on_delete=models.SET_NULL)
+    provider = models.CharField(max_length=12, default='local')
+    share_course = models.BooleanField(default=False)
+    title = models.CharField(max_length=80)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+
+
+class AITurn(models.Model):
+    conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE, related_name='turns')
+    request_id = models.UUIDField(unique=True)
+    question = models.TextField(max_length=3000)
+    answer = models.TextField(blank=True)
+    status = models.CharField(max_length=10, default='pending')
+    sources = models.JSONField(default=list, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at', 'pk']

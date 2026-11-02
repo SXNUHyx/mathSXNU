@@ -65,7 +65,7 @@ class LearningSectionTests(TestCase):
         self.assertContains(page, 'formula-editor.js')
         self.assertContains(page, 'data-mathtype-uri=""')
         self.assertNotContains(page, 'wiris.net')
-        self.assertNotContains(self.student_client.get(self.class_url), 'mathlive.min.js')
+        self.assertContains(self.student_client.get(self.class_url), 'mathlive.min.js')
 
     @override_settings(MATHTYPE_SERVICE_URI='https://licensed.example.org/plugin/app/', MATHTYPE_SERVICE_SERVER='java')
     def test_optional_mathtype_configuration_uses_public_service_address(self):

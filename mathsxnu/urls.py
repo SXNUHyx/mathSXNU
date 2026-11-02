@@ -2,11 +2,15 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 from feedback import views
 from feedback import course_views
+from feedback import reports
+from feedback import ai_views
 from feedback.auth import TeacherLoginView, register, registration_choice
 
 urlpatterns = [
     path("health/", views.health, name="health"),
     path("", views.home, name="home"),
+    path("mathai/", ai_views.mathai, name="mathai"),
+    path("mathai/<int:pk>/", ai_views.mathai, name="ai_chat"),
     path("join/", views.join, name="join"),
     path("accounts/login/", TeacherLoginView.as_view(), name="login"),
     path("accounts/register/", registration_choice, name="register_choice"),
@@ -23,6 +27,8 @@ urlpatterns = [
     path("teacher/<str:code>/qr/", views.lesson_qr, name="lesson_qr"),
     path("teacher/<str:code>/toggle/", views.toggle_lesson, name="toggle_lesson"),
     path("teacher/<str:code>/export/", views.export_csv, name="export_csv"),
+    path("teacher/<str:code>/answers/", reports.answer_report, name="answer_report"),
+    path("teacher/<str:code>/answers.docx", reports.export_answers, name="export_answers"),
     path("teacher/<str:code>/delete/", course_views.lesson_delete, name="lesson_delete"),
     path("teacher/<str:code>/restore/", course_views.lesson_restore, name="lesson_restore"),
     path("teacher/<str:code>/blocks/new/", course_views.block_edit, name="block_create"),
@@ -32,6 +38,7 @@ urlpatterns = [
     path("teacher/<str:code>/materials/<int:pk>/delete/", course_views.material_delete, name="material_delete"),
     path("teacher/<str:code>/feedback/<int:pk>/reply/", course_views.reply_create, name="reply_create"),
     path("materials/<int:pk>/", course_views.material_file, name="material_file"),
+    path("questions/files/<int:pk>/", course_views.question_file, name="question_file"),
     path("s/<str:code>/updates/", course_views.student_updates, name="student_updates"),
     path("s/<str:code>/read/", course_views.replies_read, name="replies_read"),
     path("s/<str:code>/", views.student, name="student"),

@@ -40,6 +40,7 @@ def main():
            "CLASSROOM_DOMAIN": "classroom.test",
            "CLASSROOM_HTTP_BIND": f"127.0.0.1:{http_port}",
            "CLASSROOM_HTTPS_BIND": f"127.0.0.1:{https_port}"}
+    env.update({'DEEPSEEK_API_KEY':'','DOUBAO_API_KEY':'','KIMI_API_KEY':''})
     if args.http_trial:
         env.update({"CLASSROOM_SCHEME": "http", "CLASSROOM_ALLOW_INSECURE_HTTP": "1"})
     # Target only the local managed daemon, never another saved Docker context.
@@ -108,6 +109,17 @@ def main():
                 print("旧版升级通过：教师身份与历史反馈保留；既有资料（如有）保留。")
             if not has_old_materials:
                 run("exec", "-T", "web", "python", "manage.py", "shell", input=course_file_seed, text=True, stdout=subprocess.DEVNULL)
+            question_seed = (
+                "from feedback.models import Lesson,Response,ResponseEvent,QuestionAttachment,AIConversation,AITurn\n"
+                "from django.core.files.base import ContentFile\n"
+                "import uuid\n"
+                "lesson=Lesson.objects.get(); response=Response.objects.get()\n"
+                "event=ResponseEvent.objects.create(lesson=lesson,participant=response.participant,status='red',note='持久提问')\n"
+                "QuestionAttachment.objects.create(event=event,file=ContentFile(b'%PDF-1.7\\nquestion fixture',name='question.pdf'),original_name='question.pdf',content_type='application/pdf',size=25)\n"
+                "chat=AIConversation.objects.create(user=lesson.teacher,lesson=lesson,title='持久AI会话')\n"
+                "AITurn.objects.create(conversation=chat,request_id=uuid.uuid4(),question='持久AI问题',answer='本地检索记录',status='complete')\n"
+            )
+            run('exec','-T','web','python','manage.py','shell',input=question_seed,text=True,stdout=subprocess.DEVNULL)
             run("restart", "web")
             for _ in range(50):
                 try:
@@ -120,6 +132,7 @@ def main():
                 raise RuntimeError("容器重启后未恢复健康状态")
             run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import Lesson,Response\nassert Lesson.objects.get().title=='容器持久化演示'\nassert Response.objects.get().status=='red'\n", text=True, stdout=subprocess.DEVNULL)
             run("exec", "-T", "web", "python", "manage.py", "shell", input="from feedback.models import CourseMaterial,KnowledgeBlock\nfrom django.conf import settings\nfrom pathlib import Path\nm=CourseMaterial.objects.get()\nassert str(settings.MEDIA_ROOT)=='/data/media'\nassert Path(m.file.path).read_bytes()==b'%PDF-1.7\\nfixture'\nassert m.block.kind=='difficult'\nfrom feedback.learning import content_context\nassert content_context(m.lesson)['content_sections'][2]['blocks'][0]['materials'][0].pk==m.pk\nassert KnowledgeBlock.objects.get().title=='持久知识点'\n",text=True,stdout=subprocess.DEVNULL)
+            run('exec','-T','web','python','manage.py','shell',input="from feedback.models import QuestionAttachment,AITurn\nfrom pathlib import Path\na=QuestionAttachment.objects.get()\nassert Path(a.file.path).read_bytes()==b'%PDF-1.7\\nquestion fixture'\nassert AITurn.objects.get().answer=='本地检索记录'\n",text=True,stdout=subprocess.DEVNULL)
             if args.http_trial:
                 for role in ["teacher", "student"]:
                     jar = CookieJar()
@@ -153,8 +166,8 @@ def main():
             import tarfile
             with tarfile.open(archive) as source:
                 names = source.getnames()
-                assert len(names) == 1 and names[0].startswith("media/")
-                assert source.extractfile(names[0]).read() == b"%PDF-1.7\nfixture"
+                assert len(names) == 2 and all(name.startswith('media/') for name in names)
+                assert {source.extractfile(name).read() for name in names} == {b"%PDF-1.7\nfixture",b"%PDF-1.7\nquestion fixture"}
             print("通过：Compose服务、HTTP反向代理、静态文件、健康检查、容器重启后数据持久化、容器内备份。未申请真实域名TLS证书。")
         finally:
             # Only our random test project's synthetic volumes are removed.

@@ -18,13 +18,20 @@ def content_context(lesson):
 def reply_payload(reply):
     return {"id": reply.pk, "question": reply.question_text, "message": reply.message,
             "time": timezone.localtime(reply.created_at).strftime("%m-%d %H:%M"),
-            "unread": reply.student_read_at is None}
+            "unread": reply.student_read_at is None,
+            "attachments": [attachment_payload(a) for a in reply.question_event.attachments.all()] if reply.question_event_id else []}
+
+
+def attachment_payload(attachment):
+    return {'id': attachment.pk, 'name': attachment.original_name, 'image': attachment.is_image,
+            'url': reverse('question_file', args=[attachment.pk])}
 
 
 def feedback_payload(response):
     return {"id": response.pk, "event_id": getattr(response, "latest_event_id", None),
             "can_reply": response.user_id is not None,
             "status": response.status, "label": response.get_status_display(), "text": response.note,
+            "attachments": [attachment_payload(a) for a in getattr(response, 'question_files', [])],
             "student_name": response.real_name or (f"账号：{response.user.username}" if response.user_id else "历史不记名"),
             "student_number": response.student_number or "未填写",
             "time": timezone.localtime(response.updated_at).strftime("%H:%M:%S"),

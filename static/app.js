@@ -15,6 +15,25 @@
     }
   }
   math();
+  q('#print-report')?.addEventListener('click', async e => {
+    const button = e.currentTarget; button.disabled = true;
+    try {
+      const images = [...document.querySelectorAll('.report img')];
+      images.forEach(img => { img.loading = 'eager'; });
+      await Promise.race([Promise.all(images.map(img => img.decode().catch(() => {}))), new Promise(resolve => setTimeout(resolve, 10000))]);
+      await document.fonts.ready; window.print();
+    } finally { button.disabled = false; }
+  });
+  q('#ai-question-form')?.addEventListener('submit', () => { q('#ai-send').disabled = true; q('#ai-progress').textContent = '正在处理问题，请稍候。外部模型连接最多等待约20秒。'; });
+  function files(items, parent) {
+    const box = el('div', 'question-files');
+    for (const item of items || []) {
+      const link = el('a', 'question-file'); link.href = item.url; link.target = '_blank'; link.rel = 'noopener';
+      if (item.image) { const img = el('img'); img.src = item.url; img.alt = item.name; img.loading = 'lazy'; link.append(img); }
+      link.append(el('span', '', item.name + ' ↓')); box.append(link);
+    }
+    parent.append(box);
+  }
   document.querySelectorAll('form[data-confirm]').forEach(form => form.addEventListener('submit', e => { if (!window.confirm(form.dataset.confirm)) e.preventDefault(); }));
   document.querySelectorAll('textarea.latex-editor').forEach(editor => {
     const preview = el('div', 'math-content math-preview');
@@ -23,7 +42,7 @@
     editor.after(preview); editor.addEventListener('input', update); update();
   });
   const note = q('#note');
-  if (note) { const update = () => { q('#char-count').textContent = `${note.value.length} / 300`; }; note.addEventListener('input', update); update(); }
+  if (note) { const update = () => { q('#char-count').textContent = `${note.value.length} / ${note.maxLength}`; }; note.addEventListener('input', update); update(); }
   const copy = q('#copy-link');
   if (copy) copy.addEventListener('click', async () => { const input = q('#student-link'); try { await navigator.clipboard.writeText(input.value); copy.textContent = '链接已复制 ✓'; } catch (_) { input.focus(); input.select(); copy.textContent = '已选中链接，请长按或按 Ctrl+C 复制'; } });
   async function json(url, options = {}) {
@@ -35,8 +54,25 @@
   const dashboard = q('#dashboard');
   if (dashboard) {
     const colors = {green: '#3b9375', yellow: '#dfa943', red: '#d87467'};
-    let feedbackSignature = '';
+    let feedbackSignature = '', insightSignature = '';
     function render(data) {
+      const insightKey = JSON.stringify(data.insights);
+      if (data.insights && insightKey !== insightSignature) {
+        insightSignature = insightKey;
+        const box = q('#keyword-insights'), info = data.insights;
+        box.replaceChildren(el('h2', '', '同学们主要疑惑在哪里？'), el('p', 'muted small', `最新黄/红反馈：${info.students}位疑问学生，${info.text_questions}份文字说明。每个词每人只计一次，不分析附件；每5秒更新。`));
+        const grid = el('div', 'keyword-grid');
+        for (const term of info.terms) {
+          const card = el('article', 'keyword-card'), details = el('details');
+          card.append(el('b', '', term.term), el('span', '', `${term.count}人 · ${term.percent}%`));
+          details.append(el('summary', '', '查看问题片段'));
+          term.examples.forEach(text => details.append(el('p', '', text))); card.append(details); grid.append(card);
+        }
+        if (!info.terms.length) grid.append(el('p', 'muted', '暂无可统计的疑问文字。'));
+        box.append(grid, el('h3', '', '相关模块'));
+        info.modules.forEach(module => box.append(el('p', 'small', `${module.title}：${module.count}人`)));
+        box.append(el('p', 'muted small', '百分比以疑问学生数为分母；中文分词只供定位问题，不代表知识点掌握率。'));
+      }
       q('#total').textContent = data.total;
       let angle = 0; const gradient = [];
       for (const row of data.rows) {
@@ -64,10 +100,11 @@
         const article = el('article', 'feedback-note'), heading = el('div', 'spread');
         heading.append(el('span', `status-text ${item.status}`, item.label), el('time', '', item.time));
         article.append(heading, el('h3', '', `${item.student_name} · 学号 ${item.student_number}`), el('p', 'math-content', item.text || '学生未填写补充说明'));
+        files(item.attachments, article);
         for (const reply of item.replies) {
           const box = el('div', 'teacher-explanation'); box.append(el('span', 'muted small', `已回复 · ${reply.time} · ${reply.unread ? '学生未读' : '学生已读'}`), el('p', 'math-content', reply.message)); article.append(box);
         }
-        if (item.can_reply) { const link = el('a', 'button secondary', '回复这位学生 →'); link.href = item.reply_url; article.append(link); }
+        if (item.can_reply) { const link = el('a', 'button secondary', '回复这位学生 →'); link.href = item.reply_url; article.append(link); const history = el('a', 'text-link', '查看提问与附件历史'); history.href = item.reply_url + '#question-history'; article.append(history); }
         else article.append(el('p', 'muted small', '历史不记名记录无法定向回复。'));
         notes.append(article);
       }
@@ -104,7 +141,7 @@
         if (key !== signature) {
           signature = key; const list = q('#reply-list'); list.replaceChildren();
           if (!data.replies.length) list.append(el('p', 'muted', '暂时没有老师的回复。'));
-          data.replies.forEach(reply => { const article = el('article', 'teacher-explanation'); article.append(el('span', 'muted small', `${reply.time} · ${reply.unread ? '未读' : '已读'}`), el('blockquote', 'math-content', reply.question || '针对您的学习状态'), el('div', 'math-content', reply.message)); list.append(article); });
+          data.replies.forEach(reply => { const article = el('article', 'teacher-explanation'); article.append(el('span', 'muted small', `${reply.time} · ${reply.unread ? '未读' : '已读'}`), el('blockquote', 'math-content', reply.question || '针对您的学习状态')); files(reply.attachments, article); article.append(el('div', 'math-content', reply.message)); list.append(article); });
           q('#read-up-to').value = data.replies.length ? data.replies.at(-1).id : '';
           q('#read-replies-button').disabled = !data.replies.length;
           math(list);

@@ -6,6 +6,21 @@ from .models import Lesson, Response, KnowledgeBlock, CourseMaterial
 from .uploads import inspect_upload
 
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+
+class QuestionFilesField(forms.FileField):
+    def clean(self, data, initial=None):
+        files = data if isinstance(data, (list, tuple)) else ([data] if data else [])
+        if len(files) > 3 or sum(getattr(f, 'size', 0) for f in files) > 25 * 1024 * 1024:
+            raise forms.ValidationError('每次最多3个附件，合计不超过25MB。')
+        cleaned = [super(QuestionFilesField, self).clean(f, initial) for f in files]
+        for uploaded in cleaned:
+            uploaded.inspected_type, uploaded.inspected_image = inspect_upload(uploaded)
+        return cleaned
+
+
 class JoinForm(forms.Form):
     code = forms.RegexField(
         regex=r"^[A-HJ-NP-Z2-9]{6}$", max_length=6, min_length=6,
@@ -32,9 +47,16 @@ class LessonForm(forms.ModelForm):
 
 class ResponseForm(forms.Form):
     status = forms.ChoiceField(choices=Response.Status.choices)
-    note = forms.CharField(max_length=300, required=False, strip=True)
+    note = forms.CharField(max_length=3000, required=False, strip=True)
+    block = forms.ModelChoiceField(queryset=KnowledgeBlock.objects.none(), required=False, label='相关模块（选填）')
+    attachments = QuestionFilesField(required=False, label='图片或资料（选填）', widget=MultipleFileInput(attrs={'accept':'.jpg,.jpeg,.png,.webp,.pdf,.ppt,.pptx'}))
     real_name = forms.CharField(max_length=50, label="姓名")
     student_number = forms.RegexField(regex=r"^[A-Za-z0-9_-]{1,40}$", max_length=40, label="学号", error_messages={"invalid": "学号请使用数字、英文字母、下划线或连字符。"})
+
+    def __init__(self, *args, lesson=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if lesson:
+            self.fields['block'].queryset = lesson.blocks.all()
 
     def clean_real_name(self):
         value = self.cleaned_data["real_name"]

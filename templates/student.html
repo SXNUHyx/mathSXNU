@@ -1,21 +1,27 @@
 {% extends 'base.html' %}
 {% block title %}{{ lesson.title }} · 课堂反馈{% endblock %}
+{% block extra_head %}{% if not teacher_preview %}{% include 'includes/formula_assets.html' %}{% endif %}{% endblock %}
 {% block content %}
 <section class="student-heading"><p class="eyebrow">{{ lesson.course }} <span class="divider">/</span> 课堂 {{ lesson.code }}</p><h1>{{ lesson.title }}</h1><span class="badge {% if lesson.is_open %}open{% endif %}">{% if lesson.is_open %}正在接收反馈{% else %}课堂已结束{% endif %}</span></section>
-<div class="content-actions section-links"><a class="button secondary" href="#course-content">查看知识点与资料</a>{% if not teacher_preview %}<a class="button secondary" href="#teacher-replies">查看老师的解释</a>{% endif %}</div>
+<div class="content-actions section-links"><a class="button secondary" href="#course-content">查看知识点与资料</a>{% if not teacher_preview %}<a class="button secondary" href="#teacher-replies">查看老师的解释</a><a class="button secondary" href="{% url 'mathai' %}?lesson={{ lesson.code }}">本课堂MathAI</a>{% endif %}</div>
 <section class="panel student-panel">
 <div class="spread"><span class="section-number">此刻的理解程度</span><span class="muted small">真实反馈，及时回应</span></div><h2>这个知识点，你跟上了吗？</h2><p class="muted">选择学习状态，告诉老师具体卡在了哪里。</p>
 {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
 {% if teacher_preview %}<div class="notice">这是学生页面预览。教师账号不能提交学生反馈；请使用学生账号测试提交。</div><a class="button secondary" href="{% url 'teacher_home' %}">返回我的课堂</a>
 {% elif lesson.is_open %}
-<form method="post" id="feedback-form">{% csrf_token %}
+<form method="post" id="feedback-form" enctype="multipart/form-data">{% csrf_token %}
+{% if question_form.errors %}<div class="notice error" role="alert">{{ question_form.errors }}</div>{% endif %}
 <div class="identity-grid"><div><label for="real-name">姓名</label><input id="real-name" name="real_name" value="{{ real_name }}" maxlength="50" autocomplete="name" placeholder="请输入您的姓名" required></div><div><label for="student-number">学号</label><input id="student-number" name="student_number" value="{{ student_number }}" maxlength="40" placeholder="请输入学号，保留开头的0" required></div></div>
 <p class="muted small">姓名、学号和反馈将提供给任课教师，其他学生无法查看。</p>
 <fieldset class="signals"><legend class="sr-only">选择理解程度</legend>{% for status in statuses %}<label class="signal-choice {{ status.value }}"><input type="radio" name="status" value="{{ status.value }}" {% if selected == status.value %}checked{% endif %} required><span class="signal-body"><span class="signal-circle" aria-hidden="true">{{ status.symbol }}</span><strong>{{ status.label }}</strong><span class="signal-description">{{ status.description }}</span><span class="selected-label">已选择 ✓</span></span></label>{% endfor %}</fieldset>
-<label for="note">想让老师多讲一点什么？ <span class="muted normal">选填</span></label><textarea id="note" name="note" maxlength="300" rows="3" placeholder="写下具体困惑，老师可以直接回复您。">{{ note }}</textarea><div class="spread note-hint"><span class="muted small">请勿填写与课堂无关的隐私信息。</span><span class="muted small" id="char-count">最多300字</span></div><button class="button primary full" type="submit">{% if current %}更新我的反馈{% else %}把信号送给老师{% endif %} →</button></form>
+<label for="id_block">相关模块（选填）</label>{{ question_form.block }}
+<label for="note">想让老师多讲一点什么？ <span class="muted normal">选填</span></label><textarea class="latex-editor" id="note" name="note" maxlength="3000" rows="4" placeholder="写下具体困惑，可插入公式，也可附上题目图片与资料。">{{ note }}</textarea><div class="spread note-hint"><span class="muted small">请勿填写与课堂无关的隐私信息。</span><span class="muted small" id="char-count">最多3000字</span></div>
+<label for="id_attachments">图片或资料（选填）</label>{{ question_form.attachments }}<p class="muted small">每次最多3个附件，合计25MB；JPG/PNG/WEBP图片单个5MB，PDF/PPT/PPTX单个25MB。附件仅本人和任课教师可见，保留在本次提问历史中。提交失败后需重新选择文件。</p>
+<button class="button primary full" type="submit">{% if current %}更新我的反馈{% else %}把信号送给老师{% endif %} →</button></form>
 {% else %}<div class="closed-state"><span class="empty-symbol">✓</span><h3>感谢你的课堂反馈</h3><p>老师已结束本次收集，已有记录会保留，仍可接收老师的解释。</p>{% if current %}<p>你的最后反馈：<b>{{ current.get_status_display }}</b></p>{% endif %}<a class="button secondary" href="{% url 'student_home' %}">返回我的学习</a></div>{% endif %}
 </section>
 {% if not teacher_preview %}
+{% include 'includes/question_history.html' %}
 <section class="panel course-section" id="teacher-replies" data-updates-url="{% url 'student_updates' lesson.code %}" data-read-url="{% url 'replies_read' lesson.code %}"><div class="spread"><div><p class="section-number">只发送给您的答疑</p><h2>老师的解释</h2></div><span class="muted small">在线时约3秒自动更新</span></div><div id="reply-list" aria-live="polite">{% for reply in replies %}<article class="teacher-explanation"><span class="muted small">{{ reply.time }} · {% if reply.unread %}未读{% else %}已读{% endif %}</span><blockquote class="math-content">{{ reply.question|default:'针对您的学习状态' }}</blockquote><div class="math-content">{{ reply.message }}</div></article>{% empty %}<p class="muted">暂时没有老师的回复。</p>{% endfor %}</div><form method="post" action="{% url 'replies_read' lesson.code %}" id="read-replies-form">{% csrf_token %}{% with last_reply=replies|last %}<input type="hidden" name="up_to" id="read-up-to" value="{{ last_reply.id }}">{% endwith %}<button type="submit" class="button secondary" id="read-replies-button" {% if not replies %}disabled{% endif %}>标记以上回复为已读</button></form><p id="reply-connection" class="muted small" role="status">页面保持打开即可接收解释。</p></section>
 {% endif %}
 {% include 'includes/course_content.html' %}

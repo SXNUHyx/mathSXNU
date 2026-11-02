@@ -5,7 +5,14 @@ from urllib.parse import urlsplit
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ASSET_VERSION = "20261101-sections-formulas"
+ASSET_VERSION = "20261102-mathai-questions"
+MATHAI_PROVIDERS = {
+    'deepseek': {'key':os.environ.get('DEEPSEEK_API_KEY',''), 'model':os.environ.get('DEEPSEEK_MODEL','deepseek-chat')},
+    'doubao': {'key':os.environ.get('DOUBAO_API_KEY',''), 'model':os.environ.get('DOUBAO_MODEL','')},
+    'kimi': {'key':os.environ.get('KIMI_API_KEY',''), 'model':os.environ.get('KIMI_MODEL','moonshot-v1-8k')},
+}
+MATHAI_DAILY_USER_LIMIT = max(1,min(1000,int(os.environ.get('MATHAI_DAILY_USER_LIMIT','30'))))
+MATHAI_DAILY_GLOBAL_LIMIT = max(1,min(100000,int(os.environ.get('MATHAI_DAILY_GLOBAL_LIMIT','1000'))))
 # Optional licensed MathType service base URI; no demo service is enabled.
 MATHTYPE_SERVICE_URI = os.environ.get("MATHTYPE_SERVICE_URI", "").strip()
 MATHTYPE_SERVICE_SERVER = os.environ.get("MATHTYPE_SERVICE_SERVER", "java").strip()

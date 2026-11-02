@@ -9,7 +9,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .forms import KnowledgeBlockForm, CourseMaterialForm, ReplyForm
 from .learning import content_context, reply_payload
-from .models import Lesson, KnowledgeBlock, CourseMaterial, Response, ResponseEvent, TeacherReply, ClassroomMembership
+from .models import Lesson, KnowledgeBlock, CourseMaterial, Response, ResponseEvent, TeacherReply, ClassroomMembership, QuestionAttachment
 from .roles import teacher_required, account_role
 
 
@@ -135,6 +135,12 @@ def reply_create(request, code, pk):
     if not response.user_id:
         return HttpResponseBadRequest("历史不记名反馈无法确定接收账号，不能发送定向回复。")
     initial_event = lesson.events.filter(participant=response.participant).order_by("-pk").first()
+    if request.GET.get('event'):
+        try:
+            event_pk = int(request.GET['event'])
+        except ValueError:
+            return HttpResponseBadRequest('请选择有效的问题。')
+        initial_event = get_object_or_404(ResponseEvent, pk=event_pk, lesson=lesson, participant=response.participant)
     form = ReplyForm(request.POST if request.method == "POST" else None, initial={"event_id": initial_event.pk if initial_event else None})
     if request.method == "POST" and form.is_valid():
         with transaction.atomic():
@@ -146,7 +152,10 @@ def reply_create(request, code, pk):
                                         question_text=event.note if event else locked.note, message=form.cleaned_data["message"])
         messages.success(request, "回复已发送，学生在线时将自动收到提示。")
         return redirect(reverse("dashboard", args=[code]) + "#feedback")
-    return render(request, "reply_form.html", {"lesson": lesson, "response": response, "form": form})
+    from django.core.paginator import Paginator
+    history = Paginator(lesson.events.filter(participant=response.participant).prefetch_related('attachments').order_by('-pk'), 20).get_page(request.GET.get('questions_page'))
+    return render(request, "reply_form.html", {"lesson": lesson, "response": response, "form": form,
+        'question': initial_event, 'question_history': history, 'previous_replies': response.replies.all()})
 
 
 def student_lesson(request, code):
@@ -159,7 +168,7 @@ def student_lesson(request, code):
 @never_cache
 def student_updates(request, code):
     lesson = student_lesson(request, code)
-    replies = TeacherReply.objects.filter(response__lesson=lesson, response__user=request.user)
+    replies = TeacherReply.objects.filter(response__lesson=lesson, response__user=request.user).select_related('question_event').prefetch_related('question_event__attachments')
     return JsonResponse({"is_open": lesson.is_open, "replies": [reply_payload(r) for r in replies]})
 
 
@@ -191,3 +200,22 @@ def student_notifications(request):
         {"id": r.pk, "title": r.response.lesson.title, "preview": r.message[:120],
          "url": reverse("student", args=[r.response.lesson.code]) + "#teacher-replies"} for r in replies[:5]
     ]})
+
+
+@login_required
+@never_cache
+def question_file(request, pk):
+    attachment = get_object_or_404(QuestionAttachment.objects.select_related('event__lesson'), pk=pk, event__lesson__deleted_at__isnull=True)
+    event = attachment.event
+    allowed = (event.lesson.teacher_id == request.user.pk if account_role(request.user) == 'teacher'
+               else event.user_id == request.user.pk)
+    if not allowed:
+        raise Http404
+    try:
+        response = FileResponse(attachment.file.open('rb'), as_attachment=not attachment.is_image,
+            filename=attachment.original_name, content_type=attachment.content_type)
+    except FileNotFoundError as exc:
+        raise Http404('附件暂不可用。') from exc
+    response['Content-Security-Policy'] = "default-src 'none'; sandbox"
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response

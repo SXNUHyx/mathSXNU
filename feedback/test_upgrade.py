@@ -66,3 +66,26 @@ class MaterialSectionUpgradeTests(TransactionTestCase):
             self.assertEqual(material.section, section)
             self.assertEqual(str(material.file), path)
             self.assertEqual(material.original_name, '原讲义.pdf')
+
+
+class QuestionsAIUpgradeTests(TransactionTestCase):
+    def test_previous_classroom_questions_and_teacher_replies_survive_new_tables(self):
+        old=[('feedback','0006_material_sections')]
+        new=MigrationExecutor(connection).loader.graph.leaf_nodes('feedback')
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(new))
+        executor=MigrationExecutor(connection);executor.migrate(old)
+        apps=executor.loader.project_state(old).apps
+        user=apps.get_model('auth','User').objects.create(username='prior_teacher')
+        lesson=apps.get_model('feedback','Lesson').objects.create(teacher_id=user.pk,title='原答疑课堂',code='ABC234')
+        person=uuid.uuid4()
+        response=apps.get_model('feedback','Response').objects.create(lesson_id=lesson.pk,participant=person,status='red',note=r'原公式问题 \(x^2\)',student_number='0002')
+        event=apps.get_model('feedback','ResponseEvent').objects.create(lesson_id=lesson.pk,participant=person,status='red',note=r'原公式问题 \(x^2\)',student_number='0002')
+        apps.get_model('feedback','TeacherReply').objects.create(response_id=response.pk,teacher_id=user.pk,question_event_id=event.pk,question_text=event.note,message='原来的解释')
+        MigrationExecutor(connection).migrate(new)
+        from .models import Response,ResponseEvent,TeacherReply,QuestionAttachment,AITurn
+        self.assertEqual(Response.objects.get().student_number,'0002')
+        self.assertEqual(ResponseEvent.objects.get().note,r'原公式问题 \(x^2\)')
+        self.assertEqual(TeacherReply.objects.get().message,'原来的解释')
+        self.assertEqual(TeacherReply.objects.get().question_event_id,event.pk)
+        self.assertFalse(QuestionAttachment.objects.exists())
+        self.assertFalse(AITurn.objects.exists())

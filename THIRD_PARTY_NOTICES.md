@@ -27,3 +27,12 @@ The files under `static/vendor/katex/` contain the KaTeX runtime, auto-render he
 Copyright (c) 2013–2020 Khan Academy and other contributors. Licensed under the MIT License; the complete upstream notice is retained in [static/vendor/katex/LICENSE](static/vendor/katex/LICENSE).
 
 Python dependencies, including Django, Pillow, olefile, qrcode, WhiteNoise and Gunicorn, are installed from the pinned versions in `requirements.txt` and carry their respective upstream licenses in the installed distributions.
+
+The new server-side dependencies are jieba 0.42.1 (Chinese tokenization, MIT,
+https://github.com/fxsjy/jieba), python-docx 1.2.0 (Word documents, MIT,
+https://github.com/python-openxml/python-docx), lxml 6.1.3 (BSD,
+https://github.com/lxml/lxml) and typing_extensions 4.16.0 (PSF,
+https://github.com/python/typing_extensions). Their notices are retained in the
+installed distributions. Local MathAI uses jieba and existing course text;
+no pretrained large language model or provider SDK is bundled. Optional model
+services remain subject to each provider's account, model availability and terms.

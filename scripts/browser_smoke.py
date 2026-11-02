@@ -27,7 +27,8 @@ parser.add_argument("--http-production", action="store_true", help="Use a non-lo
 args = parser.parse_args()
 
 with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
-    env = {**os.environ, "DJANGO_DB_PATH": str(Path(tmp) / "test.sqlite3"), "DJANGO_DEBUG": "1"}
+    env = {**os.environ, "DJANGO_DB_PATH": str(Path(tmp) / "test.sqlite3"), "DJANGO_MEDIA_ROOT":str(Path(tmp)/'media'), "DJANGO_DEBUG": "1",
+           "DEEPSEEK_API_KEY":"", "DOUBAO_API_KEY":"", "KIMI_API_KEY":""}
     if args.http_production:
         env.update({"DJANGO_DEBUG": "0", "DJANGO_SECRET_KEY": secrets.token_urlsafe(64),
                     "DJANGO_ALLOW_INSECURE_HTTP": "1", "DJANGO_SSL_REDIRECT": "0",
@@ -172,10 +173,19 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.get_by_label('学号', exact=True).fill('0012026001')
             student.get_by_role("radio", name="需要帮助").check()
             student.get_by_label("想让老师多讲一点什么").fill("方差为什么不能直接用均值代替？")
+            student.get_by_text('打开可视化公式编辑器',exact=True).click()
+            student.get_by_label('公式模板分类',exact=True).select_option(label='概率统计')
+            student.get_by_role('button',name='方差',exact=True).click()
+            student.get_by_role('button',name='插入到正文',exact=True).click()
+            student.get_by_label('相关模块（选填）',exact=True).select_option(label='难点 · 方差的含义')
+            student.get_by_label('图片或资料（选填）',exact=True).set_input_files([str(image_path),str(pdf_path)])
             student.get_by_role("button", name="把信号送给老师").click()
             student.get_by_role("status").filter(has_text="反馈已送达老师").wait_for()
             assert student.locator('#course-content > section').count() == 3
             assert student.locator('#section-key').get_by_role('link', name='课程讲义PDF', exact=False).count() == 1
+            assert student.locator('#question-history .question-file').count() == 2
+            student.locator('#question-history .math-content .katex').first.wait_for()
+            student.locator('#question-history').screenshot(path=str(ARTIFACTS/'student-question-files.png'))
             student.locator('#section-difficult .math-content .katex').first.wait_for()
             student.screenshot(path=str(ARTIFACTS / "student-mobile.png"), full_page=True)
             teacher.wait_for_function("document.querySelector('#count-red').textContent === '1'", timeout=10000)
@@ -183,11 +193,15 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             assert teacher.locator("#total").inner_text() == "1"
             assert "张小明" in teacher.locator('#notes').inner_text()
             assert "0012026001" in teacher.locator('#notes').inner_text()
+            teacher.wait_for_function("document.querySelector('#keyword-insights').textContent.includes('方差')",timeout=10000)
+            assert teacher.locator('#notes .question-file').count()==2
             teacher.get_by_role('link', name='回复这位学生', exact=False).first.click()
+            assert teacher.locator('.editor-panel .question-file').count()==2
             teacher.get_by_label('给学生的解释', exact=True).fill(r"方差刻画波动：\(\operatorname{Var}(X)=E[X^2]-E[X]^2\)。请先计算偏差。")
             teacher.get_by_role('button', name='发送解释', exact=False).click()
             student.wait_for_function("document.querySelector('#reply-list').textContent.includes('方差刻画波动')", timeout=12000)
             student.locator('#reply-list .katex').first.wait_for()
+            assert student.locator('#reply-list .question-file').count()==2
             student.locator('#teacher-replies').screenshot(path=str(ARTIFACTS / 'student-replies.png'))
             student.get_by_role('button', name='标记以上回复为已读', exact=True).click()
             student.wait_for_function("document.querySelector('#reply-list').textContent.includes('已读')", timeout=10000)
@@ -224,6 +238,29 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             with teacher.expect_download() as download:
                 teacher.get_by_role("link", name="导出当前反馈 CSV").click()
             assert download.value.suggested_filename.endswith("latest.csv")
+            with teacher.expect_download() as archive:
+                teacher.get_by_role('link',name='按学号下载答疑Word',exact=False).click()
+            word_path=Path(tmp)/'answers.docx';archive.value.save_as(str(word_path))
+            import zipfile
+            with zipfile.ZipFile(word_path) as document:
+                xml=document.read('word/document.xml').decode()
+                assert '0012026001' in xml and '方差刻画波动' in xml and '知识点图片.png' in xml
+            teacher.get_by_role('link',name='查看归档 / 保存PDF / 最新关键词',exact=True).click()
+            teacher.locator('.report .katex').first.wait_for()
+            teacher.screenshot(path=str(ARTIFACTS/'answer-archive.png'),full_page=True)
+            teacher.goto(dashboard_url)
+            # Both roles can use their own local MathAI without external calls.
+            for page in [teacher,student]:
+                page.get_by_role('link',name='本课堂MathAI',exact=True).click()
+                page.get_by_label('您的问题',exact=True).fill('总体均值的期望定义是什么？')
+                page.get_by_role('button',name='发送问题',exact=False).click()
+                page.locator('#ai-turns').get_by_text('以下为老师发布的相关文字节选',exact=False).wait_for()
+                assert page.locator('#ai-turns .notification-link').count()>0
+                assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+            student.screenshot(path=str(ARTIFACTS/'mathai-student-mobile.png'),full_page=True)
+            teacher.screenshot(path=str(ARTIFACTS/'mathai-teacher.png'),full_page=True)
+            teacher.goto(dashboard_url)
+            student.goto(student_url)
             teacher.get_by_role("button", name="结束本次收集").click()
             student.reload()
             student.get_by_role("heading", name="感谢你的课堂反馈").wait_for()
@@ -247,7 +284,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             assert not errors, errors
             assert not external_requests, external_requests
             browser.close()
-        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "三个独立学习板块", "分板块和模块上传资料", "本地可视化公式插入与再次编辑", "手机公式键盘", "公式编辑无第三方请求", "LaTeX编辑预览及学生渲染", "图片上传与受保护读取", "PDF上传下载", "姓名学号反馈", "教师回复自动到达学生端", "回复已读", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "CSV下载", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "三个独立学习板块", "分板块和模块上传资料", "本地可视化公式插入与再次编辑", "学生提问公式与多附件", "附件问题历史与教师回复", "师生MathAI本地检索与来源", "按学号下载真实Word答疑文档", "公式归档与关键词统计", "手机公式键盘", "默认无第三方请求", "教师回复自动到达学生端", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)
