@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}删除MathAI会话 · 课堂信号{% endblock %}
+{% block content %}
+<section class="panel narrow ai-delete-confirmation">
+  <p class="eyebrow">MathAI · 我的会话</p>
+  <h1 class="page-title">删除这条会话？</h1>
+  <h2>{{ conversation.title }}</h2>
+  {% if conversation.lesson %}<p class="muted">{{ conversation.lesson }}</p>{% endif %}
+  <p>确认后将删除这条会话及其中的全部问答内容，无法从页面恢复。</p>
+  <p class="muted small">已发生的外部模型调用仍计入当天额度。已有备份按原保存规则保留。</p>
+  {% if error %}<div class="notice error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post">{% csrf_token %}<input type="hidden" name="confirm" value="yes"><div class="content-actions"><button class="button primary" type="submit">确认删除会话</button><a class="button secondary" href="{% url 'mathai' %}">取消，保留会话</a></div></form>
+</section>
+{% endblock %}

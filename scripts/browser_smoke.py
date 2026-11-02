@@ -252,6 +252,13 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             # Both roles can use their own local MathAI without external calls.
             for page in [teacher,student]:
                 page.get_by_role('link',name='本课堂MathAI',exact=True).click()
+                lesson_options = page.locator('#id_lesson option').all_text_contents()
+                assert any('统计学 · 演示课程 / 均值与方差（' in text for text in lesson_options),lesson_options
+                assert not any('Lesson object' in text for text in lesson_options)
+                assert page.locator('#id_lesson').input_value()
+                assert page.locator('#id_provider option:checked').inner_text()=='MathAI'
+                if page==teacher:
+                    page.screenshot(path=str(ARTIFACTS/'mathai-classroom-selector.png'),full_page=True)
                 page.get_by_label('您的问题',exact=True).fill('总体均值的期望定义是什么？')
                 page.get_by_role('button',name='发送问题',exact=False).click()
                 page.locator('#ai-turns').get_by_text('以下为老师发布的相关文字节选',exact=False).wait_for()
@@ -259,6 +266,20 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
                 assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             student.screenshot(path=str(ARTIFACTS/'mathai-student-mobile.png'),full_page=True)
             teacher.screenshot(path=str(ARTIFACTS/'mathai-teacher.png'),full_page=True)
+            for page in [teacher,student]:
+                chat_url = page.url
+                page.locator('.ai-thread').get_by_role('link',name='删除会话：',exact=False).click()
+                page.get_by_role('heading',name='删除这条会话？',exact=True).wait_for()
+                if page==student:
+                    page.screenshot(path=str(ARTIFACTS/'mathai-delete-mobile.png'),full_page=True)
+                page.get_by_role('link',name='取消，保留会话',exact=True).click()
+                assert page.locator('.ai-thread').count()==1
+                page.goto(chat_url)
+                page.get_by_role('link',name='删除当前会话',exact=True).click()
+                page.get_by_role('button',name='确认删除会话',exact=True).click()
+                page.get_by_role('status').filter(has_text='会话及问答内容已删除').wait_for()
+                assert page.locator('.ai-thread').count()==0
+                assert page.goto(chat_url).status==404
             teacher.goto(dashboard_url)
             student.goto(student_url)
             teacher.get_by_role("button", name="结束本次收集").click()
@@ -284,7 +305,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             assert not errors, errors
             assert not external_requests, external_requests
             browser.close()
-        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "三个独立学习板块", "分板块和模块上传资料", "本地可视化公式插入与再次编辑", "学生提问公式与多附件", "附件问题历史与教师回复", "师生MathAI本地检索与来源", "按学号下载真实Word答疑文档", "公式归档与关键词统计", "手机公式键盘", "默认无第三方请求", "教师回复自动到达学生端", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
+        print(json.dumps({"result": "passed", "mode": "production-http-trial" if args.http_production else "development", "checks": ["师生中文用户名注册与登录", "三个独立学习板块", "分板块和模块上传资料", "本地可视化公式插入与再次编辑", "学生提问公式与多附件", "附件问题历史与教师回复", "师生MathAI检索与来源", "实际课堂名称和MathAI命名", "师生删除会话确认与取消", "按学号下载真实Word答疑文档", "公式归档与关键词统计", "手机公式键盘", "默认无第三方请求", "教师回复自动到达学生端", "学生跨设备去重", "课堂删除与恢复", "权限隔离", "移动端适配"], "screenshots": str(ARTIFACTS)}, ensure_ascii=False))
     finally:
         server.terminate()
         server.wait(timeout=10)

@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ASSET_VERSION = "20261102-mathai-questions"
+ASSET_VERSION = "20261102-mathai-conversations"
 MATHAI_PROVIDERS = {
     'deepseek': {'key':os.environ.get('DEEPSEEK_API_KEY',''), 'model':os.environ.get('DEEPSEEK_MODEL','deepseek-chat')},
     'doubao': {'key':os.environ.get('DOUBAO_API_KEY',''), 'model':os.environ.get('DOUBAO_MODEL','')},

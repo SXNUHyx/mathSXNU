@@ -23,6 +23,9 @@ class Lesson(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+    def __str__(self):
+        return f"{self.course} / {self.title}（{self.code}）"
+
 
 class Response(models.Model):
     class Status(models.TextChoices):
@@ -179,3 +182,13 @@ class AITurn(models.Model):
 
     class Meta:
         ordering = ['created_at', 'pk']
+
+
+class AIUsageDay(models.Model):
+    """External request counts survive deletion of private conversation content."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    day = models.DateField()
+    requests = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['user', 'day'], name='one_ai_usage_day_per_user')]

@@ -6,12 +6,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
-from django.http import Http404
+from django.db.models import Q, Sum
+from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
-from .models import AIConversation, AITurn, AccountProfile
+from django.views.decorators.http import require_http_methods
+from .models import AIConversation, AITurn, AccountProfile, AIUsageDay
 from .mathai import available_lessons, provider_options, local_answer, remote_answer, ProviderError, PROVIDERS
 
 
@@ -53,6 +54,8 @@ def mathai(request, pk=None):
         with transaction.atomic():
             profile,_ = AccountProfile.objects.get_or_create(user=request.user)
             AccountProfile.objects.select_for_update().get(pk=profile.pk)
+            if conversation:
+                conversation = get_object_or_404(eligible.select_for_update(),pk=conversation.pk)
             now = timezone.now()
             mine = AITurn.objects.filter(conversation__user=request.user)
             mine.filter(status='pending',created_at__lt=now-timedelta(seconds=90)).update(status='error',answer='此前请求中断，请重新提问。')
@@ -62,11 +65,13 @@ def mathai(request, pk=None):
                     raise Http404
                 return redirect('ai_chat',pk=existing.conversation_id)
             provider = conversation.provider if conversation else data['provider']
-            day = timezone.localtime(now).replace(hour=0,minute=0,second=0,microsecond=0)
-            paid = AITurn.objects.exclude(conversation__provider='local').filter(created_at__gte=day)
+            day = timezone.localtime(now).date()
+            paid = AIUsageDay.objects.filter(day=day)
+            user_usage = paid.filter(user=request.user).values_list('requests',flat=True).first() or 0
+            global_usage = paid.aggregate(total=Sum('requests'))['total'] or 0
             if mine.filter(status='pending').exists():
                 error = '上一条问题仍在处理，请稍后再提问。'
-            elif provider!='local' and (paid.filter(conversation__user=request.user).count()>=settings.MATHAI_DAILY_USER_LIMIT or paid.count()>=settings.MATHAI_DAILY_GLOBAL_LIMIT):
+            elif provider!='local' and (user_usage>=settings.MATHAI_DAILY_USER_LIMIT or global_usage>=settings.MATHAI_DAILY_GLOBAL_LIMIT):
                 error = '今日模型调用次数已达上限，本地课程检索仍可使用。'
             elif conversation and conversation.turns.count()>=100:
                 error = '本会话已有100次问答，请新建会话继续。'
@@ -75,6 +80,10 @@ def mathai(request, pk=None):
                     conversation = AIConversation.objects.create(user=request.user,lesson=data['lesson'],provider=provider,
                         share_course=data['share_course'],title=data['question'][:80])
                 turn = AITurn.objects.create(conversation=conversation,request_id=data['request_id'],question=data['question'])
+                if provider!='local':
+                    usage,_ = AIUsageDay.objects.get_or_create(user=request.user,day=day)
+                    usage.requests += 1
+                    usage.save(update_fields=['requests'])
         if error:
             form.add_error(None,error)
         else:
@@ -96,3 +105,25 @@ def mathai(request, pk=None):
         'turns':conversation.turns.all() if conversation else [],'providers':provider_options(),
         'provider_label':PROVIDERS.get(conversation.provider,('未知方式',''))[0] if conversation else '',
         'daily_limit':settings.MATHAI_DAILY_USER_LIMIT})
+
+
+@login_required
+@never_cache
+@require_http_methods(['GET','POST'])
+def delete_conversation(request, pk):
+    # Ownership applies even when a classroom is now hidden or closed.
+    conversation = get_object_or_404(AIConversation,pk=pk,user=request.user)
+    if request.method=='POST':
+        if request.POST.get('confirm')!='yes':
+            return HttpResponseBadRequest('请确认删除会话。')
+        with transaction.atomic():
+            profile,_ = AccountProfile.objects.get_or_create(user=request.user)
+            AccountProfile.objects.select_for_update().get(pk=profile.pk)
+            conversation = get_object_or_404(AIConversation.objects.select_for_update(),pk=pk,user=request.user)
+            if conversation.turns.filter(status='pending',created_at__gte=timezone.now()-timedelta(seconds=90)).exists():
+                return render(request,'ai_conversation_delete.html',{'conversation':conversation,
+                    'error':'该会话仍有问题正在处理，请稍后再删除。'},status=409)
+            conversation.delete()
+        messages.success(request,'会话及问答内容已删除。')
+        return redirect('mathai')
+    return render(request,'ai_conversation_delete.html',{'conversation':conversation})

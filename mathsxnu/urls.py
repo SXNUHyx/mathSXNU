@@ -11,6 +11,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("mathai/", ai_views.mathai, name="mathai"),
     path("mathai/<int:pk>/", ai_views.mathai, name="ai_chat"),
+    path("mathai/<int:pk>/delete/", ai_views.delete_conversation, name="ai_delete"),
     path("join/", views.join, name="join"),
     path("accounts/login/", TeacherLoginView.as_view(), name="login"),
     path("accounts/register/", registration_choice, name="register_choice"),

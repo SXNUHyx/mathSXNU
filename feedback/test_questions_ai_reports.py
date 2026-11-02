@@ -177,7 +177,8 @@ class MathAITests(TestCase):
         self.assertNotIn('SECRET_OTHER_COURSE',turn.answer)
         self.assertEqual(len(turn.sources),1)
         page=self.student_client.get(result.url)
-        self.assertContains(page,'非大模型')
+        self.assertContains(page,'MathAI')
+        self.assertNotContains(page,'本地 MathAI · 课程检索（非大模型）')
         self.assertContains(page,'方差描述波动')
         self.assertContains(page,'未配置',count=3)
 
@@ -202,7 +203,7 @@ class MathAITests(TestCase):
             self.ask(question='无匹配内容')
             remote.assert_not_called()
         self.assertIn('未找到',AITurn.objects.get().answer)
-        self.assertIn('不运行大模型',AITurn.objects.get().answer)
+        self.assertIn('按课程文字匹配',AITurn.objects.get().answer)
 
     def test_same_request_id_is_idempotent_and_cannot_be_replayed_by_peer(self):
         token=uuid.uuid4()

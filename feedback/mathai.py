@@ -9,7 +9,7 @@ from .roles import account_role
 from .insights import terms
 
 PROVIDERS = {
-    'local': ('本地 MathAI · 课程检索（非大模型）', ''),
+    'local': ('MathAI', ''),
     'deepseek': ('DeepSeek', 'https://api.deepseek.com/v1/chat/completions'),
     'doubao': ('豆包', 'https://ark.cn-beijing.volces.com/api/v3/chat/completions'),
     'kimi': ('Kimi', 'https://api.moonshot.cn/v1/chat/completions'),
@@ -46,8 +46,8 @@ def retrieve(user, question, lesson=None):
 def local_answer(user, question, lesson=None):
     blocks = retrieve(user,question,lesson)
     if not blocks:
-        return ('本地课程检索未找到足够匹配的文字模块。请换用课程中的概念名称，例如“方差”“定积分”，或把问题提交给老师。\n本地模式不运行大模型，不识别图片/PDF/PPT，也不会自行推导新题。', [])
-    sources, parts = [], ['以下为老师发布的相关文字节选，供您对照学习（本地检索，非大模型生成）：']
+        return ('MathAI未找到足够匹配的文字模块。请换用课程中的概念名称，例如“方差”“定积分”，或把问题提交给老师。\n目前按课程文字匹配，不识别图片/PDF/PPT，也不会自行推导新题。', [])
+    sources, parts = [], ['以下为老师发布的相关文字节选，供您对照学习（MathAI课程检索）：']
     for index,block in enumerate(blocks,1):
         name = f'{block.lesson.course} / {block.title}'
         url = reverse('dashboard' if account_role(user)=='teacher' else 'student',args=[block.lesson.code])+f'#block-{block.pk}'

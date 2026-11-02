@@ -89,3 +89,31 @@ class QuestionsAIUpgradeTests(TransactionTestCase):
         self.assertEqual(TeacherReply.objects.get().question_event_id,event.pk)
         self.assertFalse(QuestionAttachment.objects.exists())
         self.assertFalse(AITurn.objects.exists())
+
+
+class MathAIUsageUpgradeTests(TransactionTestCase):
+    def test_usage_backfill_preserves_old_chats_and_counts_china_calendar_days(self):
+        from datetime import datetime, timezone as datetime_timezone, date
+        old=[('feedback','0007_questions_mathai_archive')]
+        new=MigrationExecutor(connection).loader.graph.leaf_nodes('feedback')
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(new))
+        executor=MigrationExecutor(connection);executor.migrate(old)
+        apps=executor.loader.project_state(old).apps
+        user=apps.get_model('auth','User').objects.create(username='usage_teacher')
+        Conversation=apps.get_model('feedback','AIConversation')
+        Turn=apps.get_model('feedback','AITurn')
+        paid=Conversation.objects.create(user_id=user.pk,provider='deepseek',title='保留的旧会话')
+        local=Conversation.objects.create(user_id=user.pk,provider='local',title='保留的本地会话')
+        for provider,stamp,status in [(paid,datetime(2026,11,1,15,59,tzinfo=datetime_timezone.utc),'complete'),
+                                      (paid,datetime(2026,11,1,16,1,tzinfo=datetime_timezone.utc),'error'),
+                                      (paid,datetime(2026,11,1,17,0,tzinfo=datetime_timezone.utc),'pending'),
+                                      (local,datetime(2026,11,1,17,0,tzinfo=datetime_timezone.utc),'complete')]:
+            turn=Turn.objects.create(conversation=provider,request_id=uuid.uuid4(),question='原提问',answer='原答案',status=status)
+            Turn.objects.filter(pk=turn.pk).update(created_at=stamp)
+        MigrationExecutor(connection).migrate(new)
+        from .models import AIConversation,AITurn,AIUsageDay
+        self.assertEqual(AIConversation.objects.count(),2)
+        self.assertEqual(AITurn.objects.count(),4)
+        self.assertEqual(AITurn.objects.filter(answer='原答案').count(),4)
+        self.assertEqual(AIUsageDay.objects.get(user_id=user.pk,day=date(2026,11,1)).requests,1)
+        self.assertEqual(AIUsageDay.objects.get(user_id=user.pk,day=date(2026,11,2)).requests,2)
