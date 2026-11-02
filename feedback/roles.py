@@ -20,7 +20,8 @@ def account_context(request):
     return {"account_role": account_role(request.user), "http_trial": settings.ALLOW_INSECURE_HTTP,
             "asset_version": settings.ASSET_VERSION,
             "mathtype_service_uri": settings.MATHTYPE_SERVICE_URI,
-            "mathtype_service_server": settings.MATHTYPE_SERVICE_SERVER}
+            "mathtype_service_server": settings.MATHTYPE_SERVICE_SERVER,
+            "developer_access": bool(request.user.is_authenticated and request.user.is_active and request.user.is_staff and request.user.is_superuser)}
 
 
 def teacher_required(view):

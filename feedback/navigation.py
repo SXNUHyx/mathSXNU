@@ -6,7 +6,8 @@ from .models import Lesson
 from .roles import account_role
 
 PENDING_CLASSROOM = "pending_classroom_url"
-LANDING_VIEWS = {"student", "student_home", "teacher_home", "lesson_create", "dashboard"}
+LANDING_VIEWS = {"student", "student_home", "teacher_home", "lesson_create", "dashboard",
+                 'developer_home','developer_user_new','developer_user','developer_user_action','developer_audit','password_change'}
 
 
 def landing_match(request, target):
@@ -63,6 +64,12 @@ def authentication_destination(request, user):
         if not match:
             continue
         name = match.url_name
+        if name=='password_change':
+            return reverse(name)
+        if name.startswith('developer_'):
+            if user.is_active and user.is_staff and user.is_superuser:
+                return reverse(name,kwargs=match.kwargs)
+            continue
         code = match.kwargs.get("code", "").upper()
         if role == "teacher":
             if name in {"teacher_home", "lesson_create"}:

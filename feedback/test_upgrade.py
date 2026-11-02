@@ -117,3 +117,30 @@ class MathAIUsageUpgradeTests(TransactionTestCase):
         self.assertEqual(AITurn.objects.filter(answer='原答案').count(),4)
         self.assertEqual(AIUsageDay.objects.get(user_id=user.pk,day=date(2026,11,1)).requests,1)
         self.assertEqual(AIUsageDay.objects.get(user_id=user.pk,day=date(2026,11,2)).requests,2)
+
+
+class UserManagementUpgradeTests(TransactionTestCase):
+    def test_existing_accounts_credentials_classrooms_feedback_and_chats_survive(self):
+        old=[('feedback','0008_mathai_usage')]
+        new=MigrationExecutor(connection).loader.graph.leaf_nodes('feedback')
+        self.addCleanup(lambda: MigrationExecutor(connection).migrate(new))
+        executor=MigrationExecutor(connection);executor.migrate(old)
+        apps=executor.loader.project_state(old).apps
+        password=make_password('Existing!Teacher-8194')
+        user=apps.get_model('auth','User').objects.create(username='原教师',password=password)
+        apps.get_model('feedback','AccountProfile').objects.create(user_id=user.pk,role='teacher',real_name='原教师姓名')
+        lesson=apps.get_model('feedback','Lesson').objects.create(teacher_id=user.pk,title='原课堂',code='ABC234')
+        apps.get_model('feedback','Response').objects.create(lesson_id=lesson.pk,participant=uuid.uuid4(),status='red',note='原反馈')
+        apps.get_model('feedback','AIConversation').objects.create(user_id=user.pk,provider='local',title='原会话')
+        MigrationExecutor(connection).migrate(new)
+        from django.contrib.auth import get_user_model
+        from .models import AccountProfile,Lesson,Response,AIConversation,UserManagementLog
+        current=get_user_model().objects.get(pk=user.pk)
+        self.assertEqual(current.password,password)
+        self.assertFalse(current.is_superuser or current.is_staff)
+        self.assertEqual(AccountProfile.objects.get().real_name,'原教师姓名')
+        self.assertIsNone(AccountProfile.objects.get().archived_at)
+        self.assertEqual(Lesson.objects.get().teacher_id,user.pk)
+        self.assertEqual(Response.objects.get().note,'原反馈')
+        self.assertEqual(AIConversation.objects.get().title,'原会话')
+        self.assertFalse(UserManagementLog.objects.exists())

@@ -19,9 +19,10 @@
     <nav aria-label="主导航">
       <a href="{% url 'home' %}">学生入口</a>
       {% if user.is_authenticated %}
+        {% if developer_access %}<a href="{% url 'developer_home' %}">开发者管理</a>{% endif %}
         <a href="{% url 'mathai' %}">MathAI专区</a>
         {% if account_role == 'teacher' %}<a href="{% url 'teacher_home' %}">我的课堂</a>{% else %}<a href="{% url 'student_home' %}">我的学习 <span id="unread-count" hidden></span></a>{% endif %}
-        <form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
+        <a href="{% url 'password_change' %}">修改密码</a><form method="post" action="{% url 'logout' %}" class="inline">{% csrf_token %}<button class="nav-button">退出</button></form>
       {% else %}<a href="{% url 'login' %}?next={{ auth_next|urlencode }}">登录</a><a href="{% url 'register_choice' %}?next={{ auth_next|urlencode }}" class="nav-teacher">注册</a>{% endif %}
     </nav>
   </header>

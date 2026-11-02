@@ -4,9 +4,24 @@ from feedback import views
 from feedback import course_views
 from feedback import reports
 from feedback import ai_views
+from feedback import management_views
+from django.contrib.auth.decorators import login_required
+from django.urls import reverse_lazy
 from feedback.auth import TeacherLoginView, register, registration_choice
 
 urlpatterns = [
+    path('developer/',management_views.dashboard,name='developer_home'),
+    path('developer/users/new/',management_views.new_user,name='developer_user_new'),
+    path('developer/users/export/',management_views.export_users,name='developer_export'),
+    path('developer/users/<int:pk>/',management_views.user_detail,name='developer_user'),
+    path('developer/users/<int:pk>/<str:action>/',management_views.user_action,name='developer_user_action'),
+    path('developer/audit/',management_views.audit_logs,name='developer_audit'),
+    path('developer/api/users/',management_views.api_users,name='developer_api_users'),
+    path('developer/api/users/<int:pk>/',management_views.api_user_detail,name='developer_api_user'),
+    path('developer/api/users/<int:pk>/actions/',management_views.api_user_action,name='developer_api_action'),
+    path('developer/api/audit/',management_views.api_audit,name='developer_api_audit'),
+    path('accounts/password/change/',login_required(auth_views.PasswordChangeView.as_view(template_name='account_password_change.html',success_url=reverse_lazy('password_change_done'))),name='password_change'),
+    path('accounts/password/done/',login_required(auth_views.PasswordChangeDoneView.as_view(template_name='account_password_done.html')),name='password_change_done'),
     path("health/", views.health, name="health"),
     path("", views.home, name="home"),
     path("mathai/", ai_views.mathai, name="mathai"),

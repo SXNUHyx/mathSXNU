@@ -80,6 +80,7 @@ class AccountProfile(models.Model):
     participant = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     real_name = models.CharField(max_length=50, blank=True)
     student_number = models.CharField(max_length=40, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True)
 
 
 class ClassroomMembership(models.Model):
@@ -192,3 +193,19 @@ class AIUsageDay(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['user', 'day'], name='one_ai_usage_day_per_user')]
+
+
+class UserManagementLog(models.Model):
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='platform_actions')
+    target = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='management_records')
+    actor_name = models.CharField(max_length=150)
+    target_username = models.CharField(max_length=150)
+    target_id_snapshot = models.PositiveBigIntegerField()
+    action = models.CharField(max_length=24)
+    before = models.JSONField(default=dict)
+    after = models.JSONField(default=dict)
+    reason = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
