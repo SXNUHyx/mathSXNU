@@ -186,6 +186,9 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             with admin.expect_download() as course_download:
                 admin.get_by_role('link',name='教师讲义',exact=False).click()
             assert Path(course_download.value.path()).read_bytes()==b'%PDF-test'
+            assert admin.locator('#question-people-yellow').inner_text()=='2'
+            assert admin.locator('#question-total-yellow').inner_text()=='2'
+            assert admin.locator('#question-resolved-yellow').inner_text()=='0'
             # Replying moves a question behind pending questions, including on a polling dashboard.
             assert '有疑惑的学生' in admin.locator('#notes-yellow .feedback-note').first.inner_text()
             watcher=context.new_page();watcher.goto(admin.url)
@@ -197,6 +200,13 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             watcher.bring_to_front()
             watcher.wait_for_function("document.querySelector('#notes-yellow .feedback-note').textContent.includes('待答学生')",timeout=12000)
             assert '有疑惑的学生' in watcher.locator('#notes-yellow .feedback-note').last.inner_text()
+            assert watcher.locator('#question-resolved-yellow').inner_text()=='1'
+            assert watcher.locator('#question-pending-yellow').inner_text()=='1'
+            followup="from feedback.models import Response,ResponseEvent; r=Response.objects.get(real_name='有疑惑的学生'); ResponseEvent.objects.create(lesson=r.lesson,participant=r.participant,user=r.user,status='yellow',note='再次追问'); r.note='再次追问'; r.save()"
+            subprocess.run([PYTHON,'manage.py','shell','-c',followup],cwd=ROOT,env=env,check=True,stdout=subprocess.DEVNULL)
+            watcher.wait_for_function("document.querySelector('#question-total-yellow').textContent==='3' && document.querySelector('#question-pending-yellow').textContent==='2'",timeout=12000)
+            assert watcher.locator('#question-people-yellow').inner_text()=='2'
+            assert watcher.locator('#question-resolved-yellow').inner_text()=='1'
             watcher.close();admin.bring_to_front()
             # A changed signal must move between groups on the next poll.
             update="from feedback.models import Response; Response.objects.filter(real_name='需要帮助的学生').update(status='yellow')"
@@ -216,6 +226,6 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.locator('#ai-turns .notification-link').count()>0
             assert not errors,errors
             browser.close()
-        print(json.dumps({'result':'passed','checks':['未回答优先与回复后自动排后','MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
+        print(json.dumps({'result':'passed','checks':['提问人数次数与已解决实时统计及追问计数','未回答优先与回复后自动排后','MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
     finally:
         server.terminate();server.wait(timeout=10)

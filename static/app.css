@@ -34,3 +34,5 @@
 .course-columns .math-content{min-width:0;overflow-x:auto}
 @media(max-width:760px){.course-columns{grid-template-columns:1fr}}
 @media print{.course-columns{display:block}}
+
+.question-metrics{margin:12px 0 18px;color:var(--muted);font-size:13px;line-height:1.9}.question-metrics b{color:var(--ink)}

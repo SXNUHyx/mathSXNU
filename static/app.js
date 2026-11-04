@@ -92,6 +92,9 @@
       q('#feedback-prev').hidden = data.page <= 1; q('#feedback-prev').href = `?feedback_page=${data.page - 1}#feedback`;
       q('#feedback-next').hidden = data.page >= data.pages; q('#feedback-next').href = `?feedback_page=${data.page + 1}#feedback`;
       for (const status of ['yellow', 'red']) q(`#question-count-${status}`).textContent = data.rows.find(row => row.value === status).count;
+      for (const group of data.question_groups) {
+        for (const key of ['people', 'total', 'resolved', 'pending']) q(`#question-${key}-${group.status}`).textContent = group.statistics[key];
+      }
       const signature = JSON.stringify(data.notes);
       if (signature === feedbackSignature) return;
       feedbackSignature = signature;

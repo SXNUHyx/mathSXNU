@@ -123,9 +123,12 @@ def summary(lesson, page_number=1):
     for response in selected:
         response.question_files = files.get(response.latest_event_id, [])
     notes = [feedback_payload(r) for r in selected]
+    from .question_stats import question_statistics
+    question_stats = question_statistics(lesson, responses)
     return {
         "total": total, "rows": rows, "notes": notes, "is_open": lesson.is_open,
         "question_groups": [{"status": s["value"], "label": s["label"], "count": counts[s["value"]],
+                             "statistics": question_stats[s["value"]],
                              "notes": [n for n in notes if n["status"] == s["value"]]} for s in STATUSES[1:]],
         "expected_count": lesson.expected_count,
         "participation": round(total / lesson.expected_count * 100, 1) if lesson.expected_count else None,
@@ -226,7 +229,12 @@ def student(request, code):
                     response, created = Response.objects.get_or_create(
                         lesson=locked, user=request.user, defaults={"participant": participant, **data},
                     )
-                    if created or uploads or any(getattr(response, key) != value for key, value in data.items()):
+                    latest = locked.events.filter(participant=participant).order_by('-pk').first()
+                    answered = response.replies.filter(question_event=latest).exists() if latest else False
+                    if not answered:
+                        answered = response.replies.filter(question_event__isnull=True, question_text=response.note,
+                                                           created_at__gte=response.updated_at).exists()
+                    if created or answered or uploads or any(getattr(response, key) != value for key, value in data.items()):
                         if not created:
                             for key, value in data.items():
                                 setattr(response, key, value)
