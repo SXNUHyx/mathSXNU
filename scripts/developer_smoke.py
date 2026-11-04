@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='mathsxnu-developer-') as tmp:
     # Pass test credentials through stdin, not shell arguments or logs.
     seed="""import json,sys
 from django.contrib.auth import get_user_model
-from feedback.models import AccountProfile, Lesson, Response, CourseMaterial, KnowledgeBlock
+from feedback.models import AccountProfile, Lesson, Response, ResponseEvent, CourseMaterial, KnowledgeBlock
 from django.core.files.base import ContentFile
 import uuid
 password=json.loads(sys.stdin.readline())
@@ -43,8 +43,10 @@ for i in range(4):
 lesson=Lesson.objects.create(teacher=t,course='微积分',title='教师课程检查')
 for kind in ['knowledge','key','difficult']:
     KnowledgeBlock.objects.create(lesson=lesson,kind=kind,title='方差'+kind,body='本课堂的方差说明')
+Response.objects.create(lesson=lesson,participant=uuid.uuid4(),status='yellow',real_name='待答学生',note='尚未回复的问题')
 for status,name in [('green','已经听懂的学生'),('yellow','有疑惑的学生'),('red','需要帮助的学生')]:
-    Response.objects.create(lesson=lesson,participant=uuid.uuid4(),status=status,real_name=name,note=name+'的问题')
+    response=Response.objects.create(lesson=lesson,participant=uuid.uuid4(),user=t if status=='yellow' else None,status=status,real_name=name,note=name+'的问题')
+    ResponseEvent.objects.create(lesson=lesson,participant=response.participant,user=response.user,status=status,note=response.note)
 material=CourseMaterial(lesson=lesson,title='教师讲义',original_name='lesson.pdf',content_type='application/pdf',size=9)
 material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
 """
@@ -184,11 +186,23 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             with admin.expect_download() as course_download:
                 admin.get_by_role('link',name='教师讲义',exact=False).click()
             assert Path(course_download.value.path()).read_bytes()==b'%PDF-test'
+            # Replying moves a question behind pending questions, including on a polling dashboard.
+            assert '有疑惑的学生' in admin.locator('#notes-yellow .feedback-note').first.inner_text()
+            watcher=context.new_page();watcher.goto(admin.url)
+            admin.locator('#notes-yellow .feedback-note').filter(has_text='有疑惑的学生').get_by_role('link',name='回复这位学生',exact=False).click()
+            admin.get_by_label('给学生的解释',exact=True).fill('已回复当前问题，请对照讲解继续学习。')
+            admin.get_by_role('button',name='发送解释',exact=False).click()
+            assert '待答学生' in admin.locator('#notes-yellow .feedback-note').first.inner_text()
+            assert '有疑惑的学生' in admin.locator('#notes-yellow .feedback-note').last.inner_text()
+            watcher.bring_to_front()
+            watcher.wait_for_function("document.querySelector('#notes-yellow .feedback-note').textContent.includes('待答学生')",timeout=12000)
+            assert '有疑惑的学生' in watcher.locator('#notes-yellow .feedback-note').last.inner_text()
+            watcher.close();admin.bring_to_front()
             # A changed signal must move between groups on the next poll.
             update="from feedback.models import Response; Response.objects.filter(real_name='需要帮助的学生').update(status='yellow')"
             subprocess.run([PYTHON,'manage.py','shell','-c',update],cwd=ROOT,env=env,check=True,stdout=subprocess.DEVNULL)
             admin.wait_for_function("document.querySelector('#notes-yellow').textContent.includes('需要帮助的学生') && !document.querySelector('#notes-red').textContent.includes('需要帮助的学生')",timeout=12000)
-            assert admin.locator('#question-count-yellow').inner_text()=='2'
+            assert admin.locator('#question-count-yellow').inner_text()=='3'
             assert admin.locator('#question-count-red').inner_text()=='0'
             admin.set_viewport_size({'width':390,'height':844})
             assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
@@ -202,6 +216,6 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.locator('#ai-turns .notification-link').count()>0
             assert not errors,errors
             browser.close()
-        print(json.dumps({'result':'passed','checks':['MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
+        print(json.dumps({'result':'passed','checks':['未回答优先与回复后自动排后','MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
     finally:
         server.terminate();server.wait(timeout=10)

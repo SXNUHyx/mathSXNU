@@ -92,9 +92,19 @@ def owned_lesson(request, code):
 
 def summary(lesson, page_number=1):
     # Materialize one snapshot, so the chart, notes and denominator agree.
-    from django.db.models import OuterRef, Subquery
+    from django.db.models import F, OuterRef, Q, Subquery
     event = lesson.events.filter(participant=OuterRef("participant")).order_by("-pk").values("pk")[:1]
-    responses = list(lesson.responses.select_related("user", "lesson", "block").annotate(latest_event_id=Subquery(event)).order_by("-updated_at", "-pk"))
+    # A reply to an earlier question must not hide a student's new question.
+    # Replies without an event (legacy/direct replies) must match the current text
+    # and have been sent after that feedback was last updated.
+    current_replies = TeacherReply.objects.filter(response_id=OuterRef("pk")).filter(
+        Q(question_event_id=OuterRef("latest_event_id")) |
+        Q(question_event__isnull=True, question_text=OuterRef("note"), created_at__gte=OuterRef("updated_at"))
+    ).order_by("-created_at", "-pk")
+    responses = list(lesson.responses.select_related("user", "lesson", "block")
+        .annotate(latest_event_id=Subquery(event))
+        .annotate(answered_at=Subquery(current_replies.values("created_at")[:1]))
+        .order_by(F("answered_at").asc(nulls_first=True), "-updated_at", "-pk"))
     counts = Counter(r.status for r in responses)
     total = len(responses)
     rows = [{**s, "count": counts[s["value"]], "percent": round(counts[s["value"]] / total * 100, 1) if total else 0} for s in STATUSES]
