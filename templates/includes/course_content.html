@@ -1,5 +1,6 @@
 <div class="course-space" id="course-content">
-  <div class="spread course-space-heading"><div><p class="section-number">课程学习空间</p><h2>按板块学习与查阅资料</h2></div><nav class="section-tabs" aria-label="学习板块">{% for section in content_sections %}<a href="#section-{{ section.kind }}">{{ section.label }}</a>{% endfor %}</nav></div>
+  <div class="spread course-space-heading"><div><h2 class="section-number">课程学习空间</h2></div><nav class="section-tabs" aria-label="学习板块">{% for section in content_sections %}<a href="#section-{{ section.kind }}">{{ section.label }}</a>{% endfor %}</nav></div>
+  <div class="course-columns">
   {% for section in content_sections %}
   <section class="panel course-section section-{{ section.kind }}" id="section-{{ section.kind }}" aria-labelledby="heading-{{ section.kind }}">
     <div class="spread"><div><p class="section-number">{% if section.kind == 'knowledge' %}理解概念与方法{% elif section.kind == 'key' %}掌握核心内容{% else %}逐步攻克疑问{% endif %}</p><h2 id="heading-{{ section.kind }}">{{ section.label }}</h2></div>{% if manage_content %}<div class="content-actions"><a class="button secondary" href="{% url 'block_create' lesson.code %}?kind={{ section.kind }}">＋ 添加{{ section.label }}模块</a><a class="button primary" href="{% url 'material_upload' lesson.code %}?section={{ section.kind }}">上传{{ section.label }}资料</a></div>{% endif %}</div>
@@ -8,5 +9,6 @@
     <div class="material-gallery">{% for material in section.materials %}{% include 'includes/material.html' %}{% empty %}<p class="muted small">本板块暂无独立资料，模块附件显示在对应模块下方。</p>{% endfor %}</div>
   </section>
   {% endfor %}
+  </div>
   {% if not manage_content %}<p class="muted small">教师新增或修改学习资料后，请刷新页面查看；教师回复会自动更新。</p>{% endif %}
 </div>

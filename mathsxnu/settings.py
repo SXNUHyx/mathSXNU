@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-ASSET_VERSION = "20261104-course-management"
+ASSET_VERSION = "20261104-mathsig"
 CSRF_FAILURE_VIEW = 'feedback.management_views.csrf_failure'
 MATHAI_PROVIDERS = {
     'deepseek': {'key':os.environ.get('DEEPSEEK_API_KEY',''), 'model':os.environ.get('DEEPSEEK_MODEL','deepseek-chat')},

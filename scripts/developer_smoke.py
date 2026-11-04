@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='mathsxnu-developer-') as tmp:
     # Pass test credentials through stdin, not shell arguments or logs.
     seed="""import json,sys
 from django.contrib.auth import get_user_model
-from feedback.models import AccountProfile, Lesson, Response, CourseMaterial
+from feedback.models import AccountProfile, Lesson, Response, CourseMaterial, KnowledgeBlock
 from django.core.files.base import ContentFile
 import uuid
 password=json.loads(sys.stdin.readline())
@@ -37,8 +37,12 @@ admin=get_user_model().objects.create_superuser('演示管理员',password=passw
 t=get_user_model().objects.create_user('演示教师',password=password)
 AccountProfile.objects.create(user=t,role='teacher',real_name='演示教师')
 for i in range(4):
-    Lesson.objects.create(teacher=admin,course='管理员课程',title=f'布局课堂{i}')
+    own_lesson=Lesson.objects.create(teacher=admin,course='管理员课程',title=f'布局课堂{i}')
+    if i==0:
+        KnowledgeBlock.objects.create(lesson=own_lesson,title='方差',body='跨教师另一课堂的方差说明')
 lesson=Lesson.objects.create(teacher=t,course='微积分',title='教师课程检查')
+for kind in ['knowledge','key','difficult']:
+    KnowledgeBlock.objects.create(lesson=lesson,kind=kind,title='方差'+kind,body='本课堂的方差说明')
 for status,name in [('green','已经听懂的学生'),('yellow','有疑惑的学生'),('red','需要帮助的学生')]:
     Response.objects.create(lesson=lesson,participant=uuid.uuid4(),status=status,real_name=name,note=name+'的问题')
 material=CourseMaterial(lesson=lesson,title='教师讲义',original_name='lesson.pdf',content_type='application/pdf',size=9)
@@ -163,6 +167,16 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.locator('.lesson-card').count()==1
             admin.get_by_role('link',name='查看课程与资料',exact=False).click()
             assert '演示教师' in admin.locator('.notice').inner_text()
+            assert 'MathSig' in admin.locator('.brand').inner_text()
+            assert 'mathSXNU' not in admin.locator('body').inner_text()
+            for removed in ['谁遇到了什么问题','问题每页50份','仅显示有点疑惑','按板块学习与查阅资料']:
+                assert removed not in admin.locator('body').inner_text()
+            sections=admin.locator('.course-columns > section')
+            assert sections.count()==3
+            section_boxes=[sections.nth(i).bounding_box() for i in range(3)]
+            assert max(b['y'] for b in section_boxes)-min(b['y'] for b in section_boxes)<1
+            assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+            admin.screenshot(path=str(ARTIFACTS/'mathsig-course-columns.png'),full_page=True)
             assert '有疑惑的学生' in admin.locator('#notes-yellow').inner_text()
             assert '需要帮助的学生' in admin.locator('#notes-red').inner_text()
             assert '已经听懂的学生' not in admin.locator('#notes').inner_text()
@@ -179,8 +193,15 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             admin.set_viewport_size({'width':390,'height':844})
             assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             assert admin.locator('#notes-red').bounding_box()['y']>admin.locator('#notes-yellow').bounding_box()['y']
+            assert sections.nth(1).bounding_box()['y']>sections.nth(0).bounding_box()['y']
+            admin.get_by_role('link',name='本课堂MathAI',exact=True).click()
+            assert admin.locator('#id_lesson').input_value()
+            admin.get_by_label('您的问题',exact=True).fill('方差是什么意思')
+            admin.get_by_role('button',name='发送问题',exact=False).click()
+            admin.locator('#ai-turns').get_by_text('跨教师另一课堂的方差说明',exact=False).wait_for()
+            assert admin.locator('#ai-turns .notification-link').count()>0
             assert not errors,errors
             browser.close()
-        print(json.dumps({'result':'passed','checks':['管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
+        print(json.dumps({'result':'passed','checks':['MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
     finally:
         server.terminate();server.wait(timeout=10)

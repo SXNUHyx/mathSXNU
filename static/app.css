@@ -26,3 +26,11 @@
 .course-filter{margin-top:24px}.course-filter input{flex:1;min-width:180px;width:auto}.course-filter select{width:auto}
 @media(max-width:1000px){.teacher-lesson-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){.teacher-lesson-grid,.feedback-groups{grid-template-columns:1fr}.course-filter{align-items:stretch;flex-direction:column}.course-filter input,.course-filter select{width:100%}}
+
+.course-columns{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;align-items:start;margin-top:18px}
+.course-columns>.course-section{min-width:0;margin-top:0;padding:22px 18px;overflow-wrap:anywhere}
+.course-columns .course-section>.spread,.course-columns .knowledge-block>.spread{flex-wrap:wrap;gap:10px}
+.course-columns .material-gallery{grid-template-columns:minmax(0,1fr)}
+.course-columns .math-content{min-width:0;overflow-x:auto}
+@media(max-width:760px){.course-columns{grid-template-columns:1fr}}
+@media print{.course-columns{display:block}}

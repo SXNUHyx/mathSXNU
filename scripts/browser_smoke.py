@@ -181,7 +181,7 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             student.get_by_label('图片或资料（选填）',exact=True).set_input_files([str(image_path),str(pdf_path)])
             student.get_by_role("button", name="把信号送给老师").click()
             student.get_by_role("status").filter(has_text="反馈已送达老师").wait_for()
-            assert student.locator('#course-content > section').count() == 3
+            assert student.locator('#course-content .course-columns > section').count() == 3
             assert student.locator('#section-key').get_by_role('link', name='课程讲义PDF', exact=False).count() == 1
             assert student.locator('#question-history .question-file').count() == 2
             student.locator('#question-history .math-content .katex').first.wait_for()

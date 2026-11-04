@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#185b4a">
-  <title>{% block title %}课堂信号 · mathSXNU{% endblock %}</title>
+  <title>{% block title %}课堂信号 · MathSig{% endblock %}</title>
   <link rel="stylesheet" href="{% static 'app.css' %}?v={{ asset_version }}">
   <link rel="stylesheet" href="{% static 'vendor/katex/katex.min.css' %}">
   <script src="{% static 'vendor/katex/katex.min.js' %}" defer></script>
@@ -15,7 +15,7 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="{% url 'home' %}" aria-label="课堂信号首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>课堂信号<small>mathSXNU</small></span></a>
+    <a class="brand" href="{% url 'home' %}" aria-label="课堂信号首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span><span>课堂信号<small>MathSig</small></span></a>
     <nav aria-label="主导航">
       <a href="{% url 'home' %}">学生入口</a>
       {% if user.is_authenticated %}
@@ -27,6 +27,6 @@
     </nav>
   </header>
   <main id="main">{% if http_trial %}<div class="notice transport-warning" role="note">当前为 HTTP 功能试用，密码和反馈不加密。请使用测试账号，正式教学前切换到 HTTPS。</div>{% endif %}{% if account_role == 'student' %}<div id="student-notifications" data-url="{% url 'student_notifications' %}" aria-live="polite"></div>{% endif %}{% for message in messages %}<div class="notice success" role="status">{{ message }}</div>{% endfor %}{% block content %}{% endblock %}</main>
-  <footer class="site-footer"><span>mathSXNU · 让每一次困惑，都有回应</span><span>课堂即时反馈 · 不用于考勤或成绩评定</span></footer>
+  <footer class="site-footer"><span>MathSig · 让每一次困惑，都有回应</span><span>课堂即时反馈 · 不用于考勤或成绩评定</span></footer>
 </body>
 </html>

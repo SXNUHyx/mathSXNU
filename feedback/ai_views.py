@@ -18,7 +18,7 @@ from .mathai import available_lessons, provider_options, local_answer, remote_an
 
 class AIQuestionForm(forms.Form):
     provider = forms.ChoiceField(label='问答方式')
-    lesson = forms.ModelChoiceField(queryset=None,required=False,label='关联课堂（选填）')
+    lesson = forms.ModelChoiceField(queryset=None,required=False,label='关联课堂（选填，不限制检索范围）')
     share_course = forms.BooleanField(required=False,label='向外部模型附带相关课堂文字（选填）')
     question = forms.CharField(max_length=3000,label='您的问题',widget=forms.Textarea(attrs={'rows':4,'class':'latex-editor'}))
     request_id = forms.UUIDField(widget=forms.HiddenInput)
