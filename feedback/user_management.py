@@ -15,8 +15,7 @@ ACTIONS={'create':'创建账号','edit':'修改资料/角色','enable':'启用�
          'archive':'归档账号','restore':'恢复账号','password_reset':'重置密码','grant_admin':'服务器开通管理员'}
 
 
-def is_developer(user):
-    return bool(user.is_authenticated and user.is_active and user.is_superuser and user.is_staff)
+from .roles import is_developer
 
 
 def profile_of(user):

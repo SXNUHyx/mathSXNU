@@ -10,6 +10,7 @@ from django.urls import reverse_lazy
 from feedback.auth import TeacherLoginView, register, registration_choice
 
 urlpatterns = [
+    path('developer/lessons/',management_views.lessons,name='developer_lessons'),
     path('developer/',management_views.dashboard,name='developer_home'),
     path('developer/users/new/',management_views.new_user,name='developer_user_new'),
     path('developer/users/export/',management_views.export_users,name='developer_export'),

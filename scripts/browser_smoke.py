@@ -298,7 +298,10 @@ with tempfile.TemporaryDirectory(prefix="mathsxnu-browser-") as tmp:
             teacher.get_by_role('link', name='课堂回收站', exact=False).click()
             teacher.get_by_role('button', name='恢复课堂', exact=True).click()
             assert teacher.locator('.knowledge-block').count() == 3
-            assert '方差刻画波动' in teacher.locator('#notes').inner_text()
+            assert '方差刻画波动' not in teacher.locator('#notes').inner_text()
+            assert teacher.locator('#count-green').inner_text() == '1'
+            teacher.get_by_role('link', name='查看归档 / 保存PDF / 最新关键词', exact=True).click()
+            assert '方差刻画波动' in teacher.locator('main').inner_text()
             student.goto(base)
             student.screenshot(path=str(ARTIFACTS / "home-mobile.png"), full_page=True)
             assert student.evaluate("document.documentElement.scrollWidth <= window.innerWidth")

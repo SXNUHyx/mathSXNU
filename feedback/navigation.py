@@ -3,11 +3,11 @@ from urllib.parse import urlsplit
 from django.urls import Resolver404, resolve, reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from .models import Lesson
-from .roles import account_role
+from .roles import account_role, managed_lessons
 
 PENDING_CLASSROOM = "pending_classroom_url"
 LANDING_VIEWS = {"student", "student_home", "teacher_home", "lesson_create", "dashboard",
-                 'developer_home','developer_user_new','developer_user','developer_user_action','developer_audit','password_change'}
+                 'developer_lessons','developer_home','developer_user_new','developer_user','developer_user_action','developer_audit','password_change'}
 
 
 def landing_match(request, target):
@@ -74,7 +74,7 @@ def authentication_destination(request, user):
         if role == "teacher":
             if name in {"teacher_home", "lesson_create"}:
                 return reverse(name)
-            if name in {"student", "dashboard"} and Lesson.objects.filter(code=code, teacher=user, deleted_at__isnull=True).exists():
+            if name in {"student", "dashboard"} and managed_lessons(user).filter(code=code, deleted_at__isnull=True).exists():
                 return reverse("dashboard", args=[code])
         elif name == "student_home":
             return reverse("student_home")

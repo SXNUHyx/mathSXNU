@@ -91,11 +91,16 @@
       q('#feedback-page').textContent = `第 ${data.page} / ${data.pages} 页`;
       q('#feedback-prev').hidden = data.page <= 1; q('#feedback-prev').href = `?feedback_page=${data.page - 1}#feedback`;
       q('#feedback-next').hidden = data.page >= data.pages; q('#feedback-next').href = `?feedback_page=${data.page + 1}#feedback`;
+      for (const status of ['yellow', 'red']) q(`#question-count-${status}`).textContent = data.rows.find(row => row.value === status).count;
       const signature = JSON.stringify(data.notes);
       if (signature === feedbackSignature) return;
       feedbackSignature = signature;
-      const notes = q('#notes'); notes.replaceChildren();
-      if (!data.notes.length) notes.append(el('p', 'empty muted', '还没有收到学生反馈。'));
+      const notes = q('#notes');
+      for (const status of ['yellow', 'red']) {
+        const group = q(`#notes-${status}`); group.replaceChildren();
+        const label = status === 'yellow' ? '有点疑惑' : '需要帮助';
+        if (!data.notes.some(item => item.status === status)) group.append(el('p', 'empty muted', `本页暂无${label}的问题。`));
+      }
       for (const item of data.notes) {
         const article = el('article', 'feedback-note'), heading = el('div', 'spread');
         heading.append(el('span', `status-text ${item.status}`, item.label), el('time', '', item.time));
@@ -106,7 +111,7 @@
         }
         if (item.can_reply) { const link = el('a', 'button secondary', '回复这位学生 →'); link.href = item.reply_url; article.append(link); const history = el('a', 'text-link', '查看提问与附件历史'); history.href = item.reply_url + '#question-history'; article.append(history); }
         else article.append(el('p', 'muted small', '历史不记名记录无法定向回复。'));
-        notes.append(article);
+        q(`#notes-${item.status}`)?.append(article);
       }
       math(notes);
     }

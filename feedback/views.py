@@ -13,7 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
 from .forms import JoinForm, LessonForm, ResponseForm
 from .models import Lesson, Response, ResponseEvent, AccountProfile, ClassroomMembership, TeacherReply, QuestionAttachment
-from .roles import account_role, teacher_required
+from .roles import account_role, teacher_required, managed_lessons, is_developer
 from .learning import content_context, feedback_payload, reply_payload
 from .insights import keyword_insights
 
@@ -87,7 +87,7 @@ def student_home(request):
 
 
 def owned_lesson(request, code):
-    return get_object_or_404(Lesson, code=code, teacher=request.user, deleted_at__isnull=True)
+    return get_object_or_404(managed_lessons(request.user), code=code, deleted_at__isnull=True)
 
 
 def summary(lesson, page_number=1):
@@ -98,12 +98,13 @@ def summary(lesson, page_number=1):
     counts = Counter(r.status for r in responses)
     total = len(responses)
     rows = [{**s, "count": counts[s["value"]], "percent": round(counts[s["value"]] / total * 100, 1) if total else 0} for s in STATUSES]
-    pages = max(1, (total + 49) // 50)
+    questions = [r for r in responses if r.status in {"yellow", "red"}]
+    pages = max(1, (len(questions) + 49) // 50)
     try:
         page = min(pages, max(1, int(page_number)))
     except (TypeError, ValueError):
         page = 1
-    selected = responses[(page - 1) * 50:page * 50]
+    selected = questions[(page - 1) * 50:page * 50]
     from django.db.models import prefetch_related_objects
     prefetch_related_objects(selected, "replies__question_event__attachments")
     files = {}
@@ -114,6 +115,8 @@ def summary(lesson, page_number=1):
     notes = [feedback_payload(r) for r in selected]
     return {
         "total": total, "rows": rows, "notes": notes, "is_open": lesson.is_open,
+        "question_groups": [{"status": s["value"], "label": s["label"], "count": counts[s["value"]],
+                             "notes": [n for n in notes if n["status"] == s["value"]]} for s in STATUSES[1:]],
         "expected_count": lesson.expected_count,
         "participation": round(total / lesson.expected_count * 100, 1) if lesson.expected_count else None,
         "updated": timezone.localtime().strftime("%H:%M:%S"),
@@ -164,7 +167,7 @@ def toggle_lesson(request, code):
     if action not in {"open", "close"}:
         return HttpResponseBadRequest("请选择开放或结束课堂。")
     with transaction.atomic():
-        lesson = get_object_or_404(Lesson.objects.select_for_update(), code=code, teacher=request.user, deleted_at__isnull=True)
+        lesson = get_object_or_404(managed_lessons(request.user).select_for_update(), code=code, deleted_at__isnull=True)
         lesson.is_open = action == "open"
         lesson.save(update_fields=["is_open"])
     messages.success(request, "课堂已开放，可以继续接收反馈。" if lesson.is_open else "课堂已结束，反馈记录已保留。")
@@ -176,7 +179,7 @@ def toggle_lesson(request, code):
 def student(request, code):
     lesson = get_object_or_404(Lesson, code=code.upper(), deleted_at__isnull=True)
     if account_role(request.user) == "teacher":
-        if lesson.teacher_id != request.user.pk:
+        if lesson.teacher_id != request.user.pk and not is_developer(request.user):
             raise Http404
         if request.method == "POST":
             return render(request, "role_required.html", {"student_only": True}, status=403)

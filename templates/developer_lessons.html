@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}课程管理 · 开发者后台{% endblock %}
+{% block content %}
+<div class="page-heading"><div><p class="eyebrow">开发者后台</p><h1 class="page-title">全站课程管理</h1><p class="muted">查看各教师的课堂、课程资料与学情，管理课程内容和收集状态。</p></div></div>
+{% include 'includes/developer_nav.html' %}
+<form method="get" class="content-actions course-filter"><label for="course-search">搜索课程、教师或课堂码</label><input id="course-search" name="q" value="{{ query }}" placeholder="课程 / 课堂 / 教师 / 课堂码">{% if teacher_filter %}<input type="hidden" name="teacher" value="{{ teacher_filter }}">{% endif %}<label for="course-state">课堂状态</label><select name="archived" id="course-state"><option value="0" {% if not archived %}selected{% endif %}>正常课堂</option><option value="1" {% if archived %}selected{% endif %}>回收站</option></select><button class="button primary" type="submit">查询课程</button><a class="text-link" href="{% url 'developer_lessons' %}">重置筛选</a></form>
+<p class="muted small">共 {{ lessons|length }} 个课堂{% if teacher_filter %} · 已按教师筛选{% endif %}</p>
+<div class="lesson-grid teacher-lesson-grid">
+{% for lesson in lessons %}<section class="panel lesson-card"><div class="spread"><span class="eyebrow">{{ lesson.course }}</span><span class="badge {% if lesson.is_open %}open{% endif %}">{% if archived %}回收站{% elif lesson.is_open %}接收中{% else %}已结束{% endif %}</span></div><h2>{{ lesson.title }}</h2><p>教师：{{ lesson.teacher.username }}</p><p class="muted">课堂码 {{ lesson.code }} · {{ lesson.response_count }} 份反馈</p>{% if archived %}<form method="post" action="{% url 'lesson_restore' lesson.code %}">{% csrf_token %}<button class="button secondary">恢复课堂</button></form>{% else %}<a class="button secondary" href="{% url 'dashboard' lesson.code %}">查看课程与资料 →</a>{% endif %}</section>{% empty %}<p class="panel empty wide">没有符合条件的课堂。</p>{% endfor %}
+</div>
+{% endblock %}

@@ -18,6 +18,9 @@ PROVIDERS = {
 
 def available_lessons(user):
     lessons = Lesson.objects.filter(deleted_at__isnull=True)
+    from .roles import is_developer
+    if is_developer(user):
+        return lessons
     return lessons.filter(teacher=user) if account_role(user) == 'teacher' else lessons.filter(classroommembership__student=user)
 
 

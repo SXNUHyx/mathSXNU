@@ -29,11 +29,20 @@ with tempfile.TemporaryDirectory(prefix='mathsxnu-developer-') as tmp:
     # Pass test credentials through stdin, not shell arguments or logs.
     seed="""import json,sys
 from django.contrib.auth import get_user_model
-from feedback.models import AccountProfile
+from feedback.models import AccountProfile, Lesson, Response, CourseMaterial
+from django.core.files.base import ContentFile
+import uuid
 password=json.loads(sys.stdin.readline())
-get_user_model().objects.create_superuser('演示管理员',password=password)
+admin=get_user_model().objects.create_superuser('演示管理员',password=password)
 t=get_user_model().objects.create_user('演示教师',password=password)
 AccountProfile.objects.create(user=t,role='teacher',real_name='演示教师')
+for i in range(4):
+    Lesson.objects.create(teacher=admin,course='管理员课程',title=f'布局课堂{i}')
+lesson=Lesson.objects.create(teacher=t,course='微积分',title='教师课程检查')
+for status,name in [('green','已经听懂的学生'),('yellow','有疑惑的学生'),('red','需要帮助的学生')]:
+    Response.objects.create(lesson=lesson,participant=uuid.uuid4(),status=status,real_name=name,note=name+'的问题')
+material=CourseMaterial(lesson=lesson,title='教师讲义',original_name='lesson.pdf',content_type='application/pdf',size=9)
+material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
 """
     subprocess.run([PYTHON,'manage.py','shell','-c',seed],input=json.dumps(password)+'\n',cwd=ROOT,env=env,text=True,check=True,stdout=subprocess.DEVNULL)
     with socket.socket() as sock:
@@ -137,7 +146,41 @@ AccountProfile.objects.create(user=t,role='teacher',real_name='演示教师')
             assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             assert not errors,errors
             assert not external,external
+            # Cross-teacher course management and responsive four-column cards.
+            admin.set_viewport_size({'width':1440,'height':1000})
+            admin.goto(base+'/teacher/')
+            cards=admin.locator('.teacher-lesson-grid .lesson-card')
+            assert cards.count()==4
+            boxes=[cards.nth(i).bounding_box() for i in range(4)]
+            assert max(b['y'] for b in boxes)-min(b['y'] for b in boxes)<1
+            admin.set_viewport_size({'width':390,'height':844})
+            assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+            assert cards.nth(1).bounding_box()['y']>cards.nth(0).bounding_box()['y']
+            admin.set_viewport_size({'width':1440,'height':1000})
+            admin.get_by_role('link',name='管理全站教师课程',exact=False).click()
+            admin.get_by_label('搜索课程、教师或课堂码').fill('演示教师')
+            admin.get_by_role('button',name='查询课程',exact=True).click()
+            assert admin.locator('.lesson-card').count()==1
+            admin.get_by_role('link',name='查看课程与资料',exact=False).click()
+            assert '演示教师' in admin.locator('.notice').inner_text()
+            assert '有疑惑的学生' in admin.locator('#notes-yellow').inner_text()
+            assert '需要帮助的学生' in admin.locator('#notes-red').inner_text()
+            assert '已经听懂的学生' not in admin.locator('#notes').inner_text()
+            assert admin.locator('#count-green').inner_text()=='1'
+            with admin.expect_download() as course_download:
+                admin.get_by_role('link',name='教师讲义',exact=False).click()
+            assert Path(course_download.value.path()).read_bytes()==b'%PDF-test'
+            # A changed signal must move between groups on the next poll.
+            update="from feedback.models import Response; Response.objects.filter(real_name='需要帮助的学生').update(status='yellow')"
+            subprocess.run([PYTHON,'manage.py','shell','-c',update],cwd=ROOT,env=env,check=True,stdout=subprocess.DEVNULL)
+            admin.wait_for_function("document.querySelector('#notes-yellow').textContent.includes('需要帮助的学生') && !document.querySelector('#notes-red').textContent.includes('需要帮助的学生')",timeout=12000)
+            assert admin.locator('#question-count-yellow').inner_text()=='2'
+            assert admin.locator('#question-count-red').inner_text()=='0'
+            admin.set_viewport_size({'width':390,'height':844})
+            assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+            assert admin.locator('#notes-red').bounding_box()['y']>admin.locator('#notes-yellow').bounding_box()['y']
+            assert not errors,errors
             browser.close()
-        print(json.dumps({'result':'passed','checks':['管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
+        print(json.dumps({'result':'passed','checks':['管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
     finally:
         server.terminate();server.wait(timeout=10)

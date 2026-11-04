@@ -239,3 +239,25 @@ def api_audit(request):
         return method_error(['GET'])
     payload,form=audit_payload(request.GET)
     return JsonResponse(payload) if payload else form_error(form)
+
+
+@developer_only()
+def lessons(request):
+    from django.db.models import Count, Q
+    from .models import Lesson
+    courses = Lesson.objects.select_related('teacher').annotate(response_count=Count('responses'))
+    teacher = request.GET.get('teacher', '')
+    if teacher:
+        try:
+            courses = courses.filter(teacher_id=int(teacher))
+        except (ValueError, OverflowError):
+            courses = courses.none()
+    query = request.GET.get('q', '').strip()
+    if query:
+        courses = courses.filter(Q(course__icontains=query) | Q(title__icontains=query) |
+                                 Q(teacher__username__icontains=query) | Q(code__icontains=query))
+    archived = request.GET.get('archived') == '1'
+    courses = courses.filter(deleted_at__isnull=not archived)
+    return render(request, 'developer_lessons.html', {
+        'lessons': courses, 'query': query, 'teacher_filter': teacher, 'archived': archived,
+    })

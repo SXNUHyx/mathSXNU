@@ -230,9 +230,9 @@ class CourseFeatureTests(TestCase):
             self.assertEqual(names,["media/"+material.file.name])
             self.assertTrue(archive.extractfile(names[0]).read().startswith(b"\x89PNG"))
 
-    def test_every_feedback_is_accessible_through_pagination(self):
+    def test_every_question_is_accessible_through_pagination(self):
         import uuid
-        Response.objects.bulk_create([Response(lesson=self.lesson,participant=uuid.uuid4(),status="green",note=f"反馈{x}") for x in range(51)])
+        Response.objects.bulk_create([Response(lesson=self.lesson,participant=uuid.uuid4(),status="yellow",note=f"反馈{x}") for x in range(51)])
         url=reverse("lesson_stats",args=[self.lesson.code])
         first=self.teacher_client.get(url).json()
         second=self.teacher_client.get(url,{"feedback_page":2}).json()

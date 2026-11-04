@@ -5,6 +5,17 @@ from django.shortcuts import render
 from .models import AccountProfile
 
 
+def is_developer(user):
+    return bool(user.is_authenticated and user.is_active and user.is_staff and user.is_superuser)
+
+
+def managed_lessons(user):
+    """Course owners and active developer administrators may manage lessons."""
+    from .models import Lesson
+    lessons = Lesson.objects.all()
+    return lessons if is_developer(user) else lessons.filter(teacher=user)
+
+
 def account_role(user):
     if not user.is_authenticated:
         return None
@@ -21,7 +32,7 @@ def account_context(request):
             "asset_version": settings.ASSET_VERSION,
             "mathtype_service_uri": settings.MATHTYPE_SERVICE_URI,
             "mathtype_service_server": settings.MATHTYPE_SERVICE_SERVER,
-            "developer_access": bool(request.user.is_authenticated and request.user.is_active and request.user.is_staff and request.user.is_superuser)}
+            "developer_access": is_developer(request.user)}
 
 
 def teacher_required(view):

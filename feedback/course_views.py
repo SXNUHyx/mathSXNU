@@ -10,11 +10,11 @@ from django.views.decorators.http import require_POST
 from .forms import KnowledgeBlockForm, CourseMaterialForm, ReplyForm
 from .learning import content_context, reply_payload
 from .models import Lesson, KnowledgeBlock, CourseMaterial, Response, ResponseEvent, TeacherReply, ClassroomMembership, QuestionAttachment
-from .roles import teacher_required, account_role
+from .roles import teacher_required, account_role, managed_lessons, is_developer
 
 
 def owned(request, code):
-    return get_object_or_404(Lesson, code=code, teacher=request.user, deleted_at__isnull=True)
+    return get_object_or_404(managed_lessons(request.user), code=code, deleted_at__isnull=True)
 
 
 @teacher_required
@@ -24,7 +24,7 @@ def lesson_delete(request, code):
         if request.POST.get("confirm") != "yes":
             return HttpResponseBadRequest("请确认删除课堂。")
         with transaction.atomic():
-            Lesson.objects.filter(pk=lesson.pk, teacher=request.user).update(deleted_at=timezone.now(), is_open=False)
+            managed_lessons(request.user).filter(pk=lesson.pk).update(deleted_at=timezone.now(), is_open=False)
         messages.success(request, "课堂已移入回收站，学生无法继续访问。可在回收站恢复。")
         return redirect("teacher_home")
     return render(request, "lesson_delete.html", {"lesson": lesson})
@@ -32,13 +32,13 @@ def lesson_delete(request, code):
 
 @teacher_required
 def lesson_trash(request):
-    return render(request, "lesson_trash.html", {"lessons": Lesson.objects.filter(teacher=request.user, deleted_at__isnull=False)})
+    return render(request, "lesson_trash.html", {"lessons": managed_lessons(request.user).select_related("teacher").filter(deleted_at__isnull=False)})
 
 
 @teacher_required
 @require_POST
 def lesson_restore(request, code):
-    lesson = get_object_or_404(Lesson, code=code, teacher=request.user, deleted_at__isnull=False)
+    lesson = get_object_or_404(managed_lessons(request.user), code=code, deleted_at__isnull=False)
     lesson.deleted_at = None
     lesson.save(update_fields=["deleted_at"])
     messages.success(request, "课堂已恢复，仍保持结束状态；需要收集反馈时请重新开放。")
@@ -116,7 +116,7 @@ def material_delete(request, code, pk):
 @never_cache
 def material_file(request, pk):
     material = get_object_or_404(CourseMaterial.objects.select_related("lesson"), pk=pk, deleted_at__isnull=True, lesson__deleted_at__isnull=True)
-    allowed = material.lesson.teacher_id == request.user.pk if account_role(request.user) == "teacher" else ClassroomMembership.objects.filter(lesson=material.lesson, student=request.user).exists()
+    allowed = is_developer(request.user) or (material.lesson.teacher_id == request.user.pk if account_role(request.user) == "teacher" else ClassroomMembership.objects.filter(lesson=material.lesson, student=request.user).exists())
     if not allowed:
         raise Http404
     try:
@@ -207,7 +207,7 @@ def student_notifications(request):
 def question_file(request, pk):
     attachment = get_object_or_404(QuestionAttachment.objects.select_related('event__lesson'), pk=pk, event__lesson__deleted_at__isnull=True)
     event = attachment.event
-    allowed = (event.lesson.teacher_id == request.user.pk if account_role(request.user) == 'teacher'
+    allowed = is_developer(request.user) or (event.lesson.teacher_id == request.user.pk if account_role(request.user) == 'teacher'
                else event.user_id == request.user.pk)
     if not allowed:
         raise Http404
