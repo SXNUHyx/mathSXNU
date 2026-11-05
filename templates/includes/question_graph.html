@@ -1,0 +1,15 @@
+<details class="question-graph" id="question-graph" open>
+  <summary>问题图谱</summary>
+  <p class="muted small">点击模块或关键词查看相关问题。连线表示同一份反馈中的关联。<span class="graph-scroll-hint">横向滑动可查看完整图谱。</span></p>
+  <div class="graph-filters">
+    <label>反馈类型<select id="graph-status" aria-label="反馈类型"><option value="all">全部疑惑与求助</option><option value="yellow">有点疑惑</option><option value="red">需要帮助</option></select></label>
+    <label>答疑状态<select id="graph-answer" aria-label="答疑状态"><option value="all">全部问题</option><option value="pending">未回答</option><option value="answered">已回答</option></select></label>
+    <button type="button" class="button secondary" id="graph-reset">查看全部关联</button>
+  </div>
+  <p id="graph-scope" class="muted small" role="status"></p>
+  <div class="graph-layout">
+    <div class="graph-viewport" tabindex="0" aria-label="问题图谱，可左右滚动"><svg id="question-graph-svg" viewBox="0 0 800 560" role="group" aria-label="课堂、学习模块与问题关键词关系"></svg></div>
+    <section class="graph-detail" aria-labelledby="graph-detail-title"><h3 id="graph-detail-title">全部关联问题</h3><p id="graph-detail-count" class="muted small"></p><div id="graph-questions"></div></section>
+  </div>
+  <noscript><p class="muted">启用JavaScript可查看交互图谱；下方学生问题列表仍可正常使用。</p></noscript>
+</details>

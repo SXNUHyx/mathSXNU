@@ -56,6 +56,7 @@
     const colors = {green: '#3b9375', yellow: '#dfa943', red: '#d87467'};
     let feedbackSignature = '', insightSignature = '';
     function render(data) {
+      window.dispatchEvent(new CustomEvent('mathsig:question-graph', {detail: data.question_graph}));
       const insightKey = JSON.stringify(data.insights);
       if (data.insights && insightKey !== insightSignature) {
         insightSignature = insightKey;

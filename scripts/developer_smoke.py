@@ -45,7 +45,7 @@ for kind in ['knowledge','key','difficult']:
     KnowledgeBlock.objects.create(lesson=lesson,kind=kind,title='方差'+kind,body='本课堂的方差说明')
 Response.objects.create(lesson=lesson,participant=uuid.uuid4(),status='yellow',real_name='待答学生',note='尚未回复的问题')
 for status,name in [('green','已经听懂的学生'),('yellow','有疑惑的学生'),('red','需要帮助的学生')]:
-    response=Response.objects.create(lesson=lesson,participant=uuid.uuid4(),user=t if status=='yellow' else None,status=status,real_name=name,note=name+'的问题')
+    response=Response.objects.create(lesson=lesson,participant=uuid.uuid4(),user=t if status=='yellow' else None,status=status,real_name=name,note='方差与数学期望：'+name+'的问题',block=lesson.blocks.filter(kind='knowledge').first() if status=='yellow' else None)
     ResponseEvent.objects.create(lesson=lesson,participant=response.participant,user=response.user,status=status,note=response.note)
 material=CourseMaterial(lesson=lesson,title='教师讲义',original_name='lesson.pdf',content_type='application/pdf',size=9)
 material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
@@ -189,9 +189,22 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.locator('#question-people-yellow').inner_text()=='2'
             assert admin.locator('#question-total-yellow').inner_text()=='2'
             assert admin.locator('#question-resolved-yellow').inner_text()=='0'
+            admin.get_by_role('button',name='关键词：方差',exact=False).click()
+            assert admin.locator('#graph-questions .graph-question').count()==2
+            assert '关键词：方差' in admin.locator('#graph-detail-title').inner_text()
+            admin.get_by_label('反馈类型',exact=True).select_option('yellow')
+            admin.get_by_role('button',name='关键词：方差',exact=False).focus()
+            admin.keyboard.press('Enter')
+            assert admin.locator('#graph-questions .graph-question').count()==1
+            admin.get_by_role('button',name='查看全部关联',exact=True).click()
+            assert admin.locator('#graph-questions .graph-question').count()==3
+            admin.locator('#question-graph').screenshot(path=str(ARTIFACTS/'problem-graph-desktop.png'))
+
             # Replying moves a question behind pending questions, including on a polling dashboard.
             assert '有疑惑的学生' in admin.locator('#notes-yellow .feedback-note').first.inner_text()
             watcher=context.new_page();watcher.goto(admin.url)
+            watcher.get_by_label('答疑状态',exact=True).select_option('pending')
+            assert watcher.locator('#graph-questions .graph-question').count()==3
             admin.locator('#notes-yellow .feedback-note').filter(has_text='有疑惑的学生').get_by_role('link',name='回复这位学生',exact=False).click()
             admin.get_by_label('给学生的解释',exact=True).fill('已回复当前问题，请对照讲解继续学习。')
             admin.get_by_role('button',name='发送解释',exact=False).click()
@@ -202,6 +215,7 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert '有疑惑的学生' in watcher.locator('#notes-yellow .feedback-note').last.inner_text()
             assert watcher.locator('#question-resolved-yellow').inner_text()=='1'
             assert watcher.locator('#question-pending-yellow').inner_text()=='1'
+            assert watcher.locator('#graph-questions .graph-question').count()==2
             followup="from feedback.models import Response,ResponseEvent; r=Response.objects.get(real_name='有疑惑的学生'); ResponseEvent.objects.create(lesson=r.lesson,participant=r.participant,user=r.user,status='yellow',note='再次追问'); r.note='再次追问'; r.save()"
             subprocess.run([PYTHON,'manage.py','shell','-c',followup],cwd=ROOT,env=env,check=True,stdout=subprocess.DEVNULL)
             watcher.wait_for_function("document.querySelector('#question-total-yellow').textContent==='3' && document.querySelector('#question-pending-yellow').textContent==='2'",timeout=12000)
@@ -218,6 +232,7 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
             assert admin.locator('#notes-red').bounding_box()['y']>admin.locator('#notes-yellow').bounding_box()['y']
             assert sections.nth(1).bounding_box()['y']>sections.nth(0).bounding_box()['y']
+            admin.locator('#question-graph').screenshot(path=str(ARTIFACTS/'problem-graph-mobile.png'))
             admin.get_by_role('link',name='本课堂MathAI',exact=True).click()
             assert admin.locator('#id_lesson').input_value()
             admin.get_by_label('您的问题',exact=True).fill('方差是什么意思')
@@ -226,6 +241,6 @@ material.file.save('lesson.pdf',ContentFile(b'%PDF-test'),save=True)
             assert admin.locator('#ai-turns .notification-link').count()>0
             assert not errors,errors
             browser.close()
-        print(json.dumps({'result':'passed','checks':['提问人数次数与已解决实时统计及追问计数','未回答优先与回复后自动排后','MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
+        print(json.dumps({'result':'passed','checks':['交互问题图谱与筛选及答疑后轮询更新','提问人数次数与已解决实时统计及追问计数','未回答优先与回复后自动排后','MathSig品牌与简洁界面','课程学习空间桌面三列与手机单列','MathAI关联课堂时跨教师课程检索','管理员跨教师课程和资料访问','桌面四列和手机单列课堂','疑惑与求助独立分组及自动刷新','管理员登录跳转','中文账号创建与资料修改','JSON搜索与CSRF写入','CSV导出','归档取消与确认','恢复后显式启用','学生拒绝管理访问','重置后原会话失效与新密码登录','可查操作日志','手机布局','无外部请求'],'screenshots':str(ARTIFACTS)},ensure_ascii=False))
     finally:
         server.terminate();server.wait(timeout=10)

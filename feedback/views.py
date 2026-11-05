@@ -126,8 +126,10 @@ def summary(lesson, page_number=1):
     notes = [feedback_payload(r) for r in selected]
     from .question_stats import question_statistics
     question_stats = question_statistics(lesson, responses)
+    from .question_graph import question_graph
     return {
         "total": total, "rows": rows, "notes": notes, "is_open": lesson.is_open,
+        "question_graph": question_graph(lesson, responses),
         "question_groups": [{"status": s["value"], "label": s["label"], "count": counts[s["value"]],
                              "statistics": question_stats[s["value"]],
                              "notes": [n for n in notes if n["status"] == s["value"]]} for s in STATUSES[1:]],

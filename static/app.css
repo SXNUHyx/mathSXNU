@@ -36,3 +36,14 @@
 @media print{.course-columns{display:block}}
 
 .question-metrics{margin:12px 0 18px;color:var(--muted);font-size:13px;line-height:1.9}.question-metrics b{color:var(--ink)}
+
+.question-graph{margin:18px 0 28px;padding:18px;border:1px solid var(--line);border-radius:14px;background:#fafcf9}
+.question-graph>summary{font-size:18px;font-weight:600;cursor:pointer;color:var(--primary)}
+.graph-filters{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.graph-filters label{margin:0;flex:1;min-width:150px}.graph-filters select{margin:6px 0 0}.graph-filters .button{margin:0}
+.graph-layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(230px,1fr);gap:18px;align-items:start}.graph-viewport{min-width:0;overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px}
+#question-graph-svg{display:block;width:100%;min-width:580px}.graph-edge{stroke:#d7e2db}.graph-node{cursor:pointer}.graph-node rect{fill:#f0f6f1;stroke:#a6c1b2;stroke-width:1.5}.graph-node text{font-size:13px;fill:var(--ink)}.graph-lesson rect{fill:#dfeee4}.graph-term rect{fill:#fff5dc;stroke:#d9bd7a}.graph-selected rect,.graph-node:focus rect{stroke:#185b4a;stroke-width:3}.graph-node:focus{outline:none}
+.graph-detail{min-width:0;max-height:490px;overflow:auto;padding:4px 8px}.graph-detail h3{font-size:17px}.graph-question{padding:14px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.graph-question h4{margin:10px 0;font-size:14px}.graph-question p{font-size:13px;white-space:pre-wrap}.graph-question .status-text{display:inline-block}
+@media(max-width:1000px){.graph-layout{grid-template-columns:1fr}.graph-detail{max-height:350px}}@media(max-width:760px){.question-graph{padding:12px}.graph-filters{align-items:stretch}.graph-filters label{min-width:120px}.graph-filters .button{width:100%}}
+@media print{.question-graph{display:none}}
+
+.graph-filters select{display:block;width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:inherit}.graph-node text{font-size:16px}.graph-scroll-hint{display:none}@media(max-width:760px){.graph-scroll-hint{display:inline}}
