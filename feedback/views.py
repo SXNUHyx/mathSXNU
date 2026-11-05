@@ -52,7 +52,7 @@ def join(request):
 @teacher_required
 def teacher_home(request):
     from django.db.models import Count
-    lessons = Lesson.objects.filter(teacher=request.user, deleted_at__isnull=True).annotate(response_count=Count("responses"))
+    lessons = Lesson.objects.filter(teacher=request.user, deleted_at__isnull=True).annotate(response_count=Count("responses")).order_by("-created_at", "-pk")
     return render(request, "teacher_home.html", {"lessons": lessons})
 
 
@@ -78,7 +78,8 @@ def lesson_create(request):
 def student_home(request):
     if account_role(request.user) == "teacher":
         return redirect("teacher_home")
-    memberships = list(request.user.classroom_memberships.filter(lesson__deleted_at__isnull=True).select_related("lesson"))
+    memberships = list(request.user.classroom_memberships.filter(lesson__deleted_at__isnull=True)
+                       .select_related("lesson").order_by("-lesson__created_at", "-lesson__pk"))
     responses = {r.lesson_id: r for r in request.user.classroom_responses.all()}
     return render(request, "student_home.html", {
         "classrooms": [{"lesson": m.lesson, "response": responses.get(m.lesson_id)} for m in memberships],
